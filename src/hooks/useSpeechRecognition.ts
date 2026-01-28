@@ -2,6 +2,16 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  0: { transcript: string };
+}
+
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResult[];
+  resultIndex: number;
+}
+
 declare global {
   interface Window {
     SpeechRecognition?: new () => SpeechRecognitionInstance;
