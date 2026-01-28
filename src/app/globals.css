@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --theme-light: #fff5f7;
+  --theme-pink: #ffe8ec;
+  --theme-soft: #ffd4dd;
+  --theme-blossom: #ffb3c1;
+  --bubble-q: #f0f0f0;
+  --bubble-a: #ffe8ec;
+  --toast-yellow: #fef08a;
+  --toast-green: #86efac;
+  --toast-blue: #93c5fd;
+}
+
+body {
+  @apply min-h-screen bg-gradient-to-b from-[#fff5f7] to-[#ffe8ec] text-gray-800;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 말풍선 꼬리 */
+.bubble-tail-left {
+  clip-path: polygon(0 0, 0 100%, 100% 100%);
+}
+.bubble-tail-right {
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
