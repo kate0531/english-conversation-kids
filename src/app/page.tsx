@@ -17,8 +17,15 @@ import TurnRow from "@/components/TurnRow";
 import GoodJobPopup from "@/components/GoodJobPopup";
 import VoiceInputButton from "@/components/VoiceInputButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import GateScreen from "@/components/GateScreen";
+import WritingTimePage from "@/components/writing/WritingTimePage";
+import HomeButton from "@/components/HomeButton";
+
+type AppMode = "gate" | "speaking" | "writing";
 
 export default function ConversationPage() {
+  const [mode, setMode] = useState<AppMode>("gate");
+
   const [messages, setMessages] = useState<TurnMessage[]>([]);
   const [results, setResults] = useState<TurnResult[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState<QuestionItem | null>(
@@ -195,6 +202,23 @@ export default function ConversationPage() {
       });
   }, [messages]);
 
+  if (mode === "gate") {
+    return (
+      <GateScreen
+        onSelectWriting={() => setMode("writing")}
+        onSelectSpeaking={() => setMode("speaking")}
+      />
+    );
+  }
+
+  if (mode === "writing") {
+    return (
+      <WritingTimePage
+        onBackToGate={() => setMode("gate")}
+      />
+    );
+  }
+
   return (
     <div
       className={`min-h-screen flex flex-col ${
@@ -210,16 +234,17 @@ export default function ConversationPage() {
             : "bg-white/80 border-pink-100"
         }`}
       >
-        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
+          <HomeButton onClick={() => setMode("gate")} />
           <h1
-            className={`text-base font-medium ${
+            className={`flex-1 text-center text-base font-medium ${
               showFreeTalkingUI ? "text-sky-600" : "text-gray-500"
             }`}
           >
             {showFreeTalkingUI ? "Free Talking Time" : "Conversation Time"}
           </h1>
-          {results.length > 0 && (
-            <div className="flex flex-wrap gap-1 justify-end">
+          {results.length > 0 ? (
+            <div className="flex flex-wrap gap-1 justify-end flex-shrink-0">
               {results.map((r) => (
                 <AchievementBadge
                   key={r.turnIndex}
@@ -235,6 +260,8 @@ export default function ConversationPage() {
                 />
               ))}
             </div>
+          ) : (
+            <div className="w-10 flex-shrink-0" />
           )}
         </div>
       </header>
