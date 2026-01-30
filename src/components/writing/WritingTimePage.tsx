@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { TOPIC_KEYS, getRandomPrompt } from "@/data/writingTopics";
+import { playClick } from "@/lib/sounds";
+import { useTTS } from "@/hooks/useTTS";
 import SentenceLine from "./SentenceLine";
 import HomeButton from "@/components/HomeButton";
 
@@ -28,6 +30,8 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showLoadingBulb, setShowLoadingBulb] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastSpokenPromptRef = useRef("");
+  const { speak: speakFemale } = useTTS({ gender: "female" });
 
   useEffect(() => {
     if (!showLoadingBulb) return;
@@ -35,7 +39,18 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
     return () => clearTimeout(t);
   }, [showLoadingBulb]);
 
+  useEffect(() => {
+    if (!prompt?.trim()) {
+      lastSpokenPromptRef.current = "";
+      return;
+    }
+    if (lastSpokenPromptRef.current === prompt) return;
+    lastSpokenPromptRef.current = prompt;
+    speakFemale(prompt);
+  }, [prompt, speakFemale]);
+
   const handleSelectTopic = useCallback((topic: string) => {
+    playClick();
     setSelectedTopic(topic);
     setPrompt(getRandomPrompt(topic));
     setLines([]);
@@ -164,13 +179,24 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
         ) : (
           <div className="space-y-4">
             <div className="flex items-start gap-2">
-              <div className="flex-1 rounded-xl border-2 border-violet-200 bg-white p-4">
-                <p className="text-xs text-gray-500 mb-1">질문</p>
-                <p className="font-bold text-gray-800">{prompt}</p>
-              </div>
               <button
                 type="button"
-                onClick={resetWriting}
+                onClick={() => {
+                  playClick();
+                  if (prompt?.trim()) speakFemale(prompt);
+                }}
+                className="flex-1 rounded-xl border-2 border-violet-200 bg-white p-4 text-left cursor-pointer hover:bg-violet-50 hover:border-violet-300 transition active:opacity-95"
+                title="들어보기"
+              >
+                <p className="text-xs text-gray-500 mb-1">질문</p>
+                <p className="font-bold text-gray-800">{prompt}</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  resetWriting();
+                }}
                 className="flex-shrink-0 rounded-xl border-2 border-violet-200 bg-white px-3 py-2 text-sm text-gray-600 hover:bg-violet-50"
               >
                 다른 주제
@@ -217,7 +243,10 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
             <div className="flex flex-col gap-4">
               <button
                 type="button"
-                onClick={handleSubmit}
+                onClick={() => {
+                  playClick();
+                  handleSubmit();
+                }}
                 disabled={!fullParagraph.trim() || isChecking || isAnalyzing}
                 className="w-full rounded-xl py-3 font-medium text-white bg-gradient-to-r from-violet-500 to-purple-500 disabled:opacity-50 disabled:cursor-not-allowed hover:from-violet-600 hover:to-purple-600 shadow-bubble transition"
               >

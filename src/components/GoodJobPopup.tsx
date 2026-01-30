@@ -1,5 +1,6 @@
 "use client";
 
+import { playClick } from "@/lib/sounds";
 import type { TurnResult } from "@/types/conversation";
 import type { Achievement } from "@/types/conversation";
 
@@ -100,7 +101,10 @@ export default function GoodJobPopup({ results, onClose }: GoodJobPopupProps) {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/15 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+      onClick={() => {
+        playClick();
+        onClose();
+      }}
       role="dialog"
       aria-label="발화 분석 리포트"
     >
@@ -176,7 +180,10 @@ export default function GoodJobPopup({ results, onClose }: GoodJobPopupProps) {
         <div className="p-4 pt-2 flex-shrink-0 border-t border-gray-300/80 bg-gray-100/80">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              playClick();
+              onClose();
+            }}
             className="w-full py-3 rounded-xl font-medium text-gray-700 bg-gray-200/90 border border-gray-300/80 hover:bg-gray-300/80 transition shadow-sm"
           >
             처음으로

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useRef } from "react";
+import { useState, useCallback, useMemo, useRef, useEffect } from "react";
 import {
   QUESTIONS,
   FIRST_QUESTION_ID,
@@ -10,6 +10,8 @@ import {
 import type { QuestionItem } from "@/types/conversation";
 import type { TurnMessage, TurnResult } from "@/types/conversation";
 import { evaluateAnswer } from "@/lib/score";
+import { playClick, playTransition, playPopup } from "@/lib/sounds";
+import { useTTS } from "@/hooks/useTTS";
 import ChatBubble from "@/components/ChatBubble";
 import ScoreToast from "@/components/ScoreToast";
 import AchievementBadge from "@/components/AchievementBadge";
@@ -37,6 +39,11 @@ export default function ConversationPage() {
   const [freeTalkingIntro, setFreeTalkingIntro] = useState(false);
   const [showGoodJobPopup, setShowGoodJobPopup] = useState(false);
   const goodJobPendingRef = useRef(false);
+  const lastSpokenQuestionIndexRef = useRef(-1);
+  const prevFreeTalkingIntroRef = useRef(false);
+
+  const { speak: speakMale } = useTTS({ gender: "male" });
+  const { speak: speakGirl } = useTTS({ gender: "childFemale" });
 
   const [toast, setToast] = useState<{
     achievement: TurnResult["achievement"];
@@ -57,6 +64,7 @@ export default function ConversationPage() {
     const trimmed = input.trim();
     if (!trimmed || !currentQuestion || isSubmitting) return;
 
+    playClick();
     setIsSubmitting(true);
     const result = await evaluateAnswer(trimmed, currentQuestion);
     const { score, achievement, corrected, feedback } = result;
@@ -120,6 +128,7 @@ export default function ConversationPage() {
   }, [input, currentQuestion, isSubmitting]);
 
   const startConversation = () => {
+    playClick();
     const first = QUESTIONS[FIRST_QUESTION_ID];
     if (!first) return;
     setCurrentQuestion(first);
@@ -138,6 +147,7 @@ export default function ConversationPage() {
   };
 
   const startFreeTalking = () => {
+    playClick();
     const q4 = QUESTIONS[FREE_TALK_FIRST_ID];
     if (!q4) return;
     setFreeTalkingIntro(false);
@@ -162,6 +172,41 @@ export default function ConversationPage() {
     setFreeTalkingIntro(false);
     setShowGoodJobPopup(false);
   };
+
+  const speakMaleRef = useRef(speakMale);
+  const speakGirlRef = useRef(speakGirl);
+  speakMaleRef.current = speakMale;
+  speakGirlRef.current = speakGirl;
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      lastSpokenQuestionIndexRef.current = -1;
+      return;
+    }
+    const last = messages[messages.length - 1];
+    if (last.role === "question" && lastSpokenQuestionIndexRef.current !== messages.length - 1) {
+      lastSpokenQuestionIndexRef.current = messages.length - 1;
+      const isFreeTalking = last.turnIndex >= 4;
+      const speak = isFreeTalking ? speakGirlRef.current : speakMaleRef.current;
+      speak(last.text);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (freeTalkingIntro && !prevFreeTalkingIntroRef.current) {
+      prevFreeTalkingIntroRef.current = true;
+      playTransition();
+    }
+    if (!freeTalkingIntro) prevFreeTalkingIntroRef.current = false;
+  }, [freeTalkingIntro]);
+
+  useEffect(() => {
+    if (toast) playPopup();
+  }, [toast]);
+
+  useEffect(() => {
+    if (showGoodJobPopup) playPopup();
+  }, [showGoodJobPopup]);
 
   const hasStarted = messages.length > 0;
   const isWaitingAnswer = currentQuestion && messages[messages.length - 1]?.role === "question";
@@ -214,7 +259,10 @@ export default function ConversationPage() {
   if (mode === "writing") {
     return (
       <WritingTimePage
-        onBackToGate={() => setMode("gate")}
+        onBackToGate={() => {
+          playClick();
+          setMode("gate");
+        }}
       />
     );
   }
@@ -235,7 +283,12 @@ export default function ConversationPage() {
         }`}
       >
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between gap-2">
-          <HomeButton onClick={() => setMode("gate")} />
+          <HomeButton
+            onClick={() => {
+              playClick();
+              setMode("gate");
+            }}
+          />
           <h1
             className={`flex-1 text-center text-base font-medium ${
               showFreeTalkingUI ? "text-sky-600" : "text-gray-500"
@@ -321,6 +374,7 @@ export default function ConversationPage() {
                 imageUrl={row.imageUrl}
                 answerText={row.answerText}
                 bubbleTheme="sky"
+                onQuestionSpeak={speakGirl}
               />
             ))}
           </main>
@@ -365,6 +419,7 @@ export default function ConversationPage() {
                 questionText={row.questionText}
                 imageUrl={row.imageUrl}
                 answerText={row.answerText}
+                onQuestionSpeak={speakMale}
               />
             ))}
           </main>

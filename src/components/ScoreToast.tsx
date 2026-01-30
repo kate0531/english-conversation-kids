@@ -1,5 +1,6 @@
 "use client";
 
+import { playClick } from "@/lib/sounds";
 import type { Achievement } from "@/types/conversation";
 
 /** 상=파랑, 중=초록, 하=빨강 — 파스텔톤, 팔모양 이모지 제외 */
@@ -53,7 +54,10 @@ export default function ScoreToast({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/15 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+      onClick={() => {
+        playClick();
+        onClose();
+      }}
       role="dialog"
       aria-label="점수 결과"
     >
@@ -69,7 +73,10 @@ export default function ScoreToast({
             </span>
             <button
               type="button"
-              onClick={onClose}
+              onClick={() => {
+                playClick();
+                onClose();
+              }}
               className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-white/60 transition"
               aria-label="닫기"
             >

@@ -1,5 +1,7 @@
 "use client";
 
+import { playClick } from "@/lib/sounds";
+
 interface GateScreenProps {
   onSelectWriting: () => void;
   onSelectSpeaking: () => void;
@@ -16,7 +18,10 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
       <div className="relative flex flex-col sm:flex-row gap-4 w-full max-w-sm">
         <button
           type="button"
-          onClick={onSelectWriting}
+          onClick={() => {
+            playClick();
+            onSelectWriting();
+          }}
           className="flex-1 rounded-2xl p-6 border-2 border-violet-400 bg-white/90 shadow-md hover:bg-violet-50 hover:border-violet-500 hover:shadow-lg transition-all duration-200 text-center"
         >
           <span className="text-2xl mb-2 block">✏️</span>
@@ -25,7 +30,10 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
         </button>
         <button
           type="button"
-          onClick={onSelectSpeaking}
+          onClick={() => {
+            playClick();
+            onSelectSpeaking();
+          }}
           className="flex-1 rounded-2xl p-6 border-2 border-pink-400 bg-white/90 shadow-md hover:bg-pink-50 hover:border-pink-500 hover:shadow-lg transition-all duration-200 text-center"
         >
           <span className="text-2xl mb-2 block">🎙️</span>

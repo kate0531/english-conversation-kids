@@ -8,11 +8,14 @@ interface ChatBubbleProps {
   turnIndex?: number;
   /** 대답 말풍선 테마. 미지정 시 연분홍 */
   theme?: "pink" | "sky";
+  /** 질문 말풍선 클릭 시 TTS 재생 (left일 때만 사용) */
+  onSpeak?: (text: string) => void;
 }
 
 /** 질문용: 이미지 없음. 대답용: 말풍선만 (이미지는 부모에서 별도 배치) */
-export default function ChatBubble({ side, text, turnIndex, theme = "pink" }: ChatBubbleProps) {
+export default function ChatBubble({ side, text, turnIndex, theme = "pink", onSpeak }: ChatBubbleProps) {
   const isLeft = side === "left";
+  const isQuestionClickable = isLeft && onSpeak && text?.trim();
 
   const rightBubbleClass =
     theme === "sky"
@@ -27,11 +30,25 @@ export default function ChatBubble({ side, text, turnIndex, theme = "pink" }: Ch
       data-turn={turnIndex}
     >
       <div
+        role={isQuestionClickable ? "button" : undefined}
+        tabIndex={isQuestionClickable ? 0 : undefined}
+        onClick={isQuestionClickable ? () => onSpeak?.(text) : undefined}
+        onKeyDown={
+          isQuestionClickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSpeak?.(text);
+                }
+              }
+            : undefined
+        }
         className={`rounded-2xl px-4 py-3 shadow-bubble ${
           isLeft
             ? "bg-gray-100 text-gray-700 rounded-bl-md"
             : rightBubbleClass
-        }`}
+        } ${isQuestionClickable ? "cursor-pointer hover:opacity-90 active:opacity-95 transition-opacity" : ""}`}
+        title={isQuestionClickable ? "들어보기" : undefined}
       >
         <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap">{text}</p>
       </div>
