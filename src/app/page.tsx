@@ -419,7 +419,7 @@ export default function ConversationPage() {
       )}
 
       {showGoodJobPopup && (
-        <GoodJobPopup onClose={goBackToStart} />
+        <GoodJobPopup results={results} onClose={goBackToStart} />
       )}
     </div>
   );

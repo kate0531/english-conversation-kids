@@ -2,34 +2,31 @@
 
 import type { Achievement } from "@/types/conversation";
 
-/** 상=파랑, 중=초록, 하=빨강 — 파스텔톤으로 통일 */
+/** 상=파랑, 중=초록, 하=빨강 — 파스텔톤, 팔모양 이모지 제외 */
 const TOAST_STYLES: Record<
   Achievement,
-  { bg: string; border: string; accent: string; text: string; label: string; emoji: string }
+  { bg: string; border: string; accent: string; text: string; label: string }
 > = {
   high: {
-    bg: "bg-gradient-to-br from-sky-100 to-sky-200/90",
-    border: "border-sky-300/80",
-    accent: "bg-sky-300/70",
+    bg: "bg-gradient-to-br from-sky-50/95 to-sky-100/90",
+    border: "border-sky-200/90",
+    accent: "bg-gradient-to-r from-sky-300/80 to-sky-400/60",
     text: "text-sky-900",
     label: "상",
-    emoji: "🌟",
   },
   mid: {
-    bg: "bg-gradient-to-br from-green-100 to-emerald-200/90",
-    border: "border-green-300/80",
-    accent: "bg-green-300/70",
+    bg: "bg-gradient-to-br from-green-50/95 to-emerald-100/90",
+    border: "border-green-200/90",
+    accent: "bg-gradient-to-r from-green-300/80 to-emerald-400/60",
     text: "text-green-900",
     label: "중",
-    emoji: "👍",
   },
   low: {
-    bg: "bg-gradient-to-br from-red-100 to-rose-200/90",
-    border: "border-red-300/80",
-    accent: "bg-red-300/70",
-    text: "text-red-900",
+    bg: "bg-gradient-to-br from-rose-50/95 to-rose-100/90",
+    border: "border-rose-200/90",
+    accent: "bg-gradient-to-r from-rose-300/80 to-rose-400/60",
+    text: "text-rose-900",
     label: "하",
-    emoji: "💪",
   },
 };
 
@@ -61,41 +58,44 @@ export default function ScoreToast({
       aria-label="점수 결과"
     >
       <div
-        className={`w-full max-w-sm rounded-2xl ${s.bg} ${s.text} shadow-toast border-2 ${s.border} overflow-hidden`}
+        className={`w-full max-w-sm rounded-2xl ${s.bg} ${s.text} shadow-xl shadow-black/8 border ${s.border} overflow-hidden ring-1 ring-black/5`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`h-1.5 ${s.accent}`} />
+        <div className={`h-2 rounded-t-2xl ${s.accent}`} />
         <div className="p-5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-lg font-semibold">
-              {s.emoji} 성취도: {s.label}
+          <div className="flex items-center justify-between mb-4">
+            <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/70 border border-black/5 text-sm font-medium shadow-sm">
+              성취도: {s.label}
             </span>
             <button
               type="button"
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-white/50 transition"
+              className="text-gray-400 hover:text-gray-600 p-1.5 rounded-full hover:bg-white/60 transition"
               aria-label="닫기"
             >
               ✕
             </button>
           </div>
-          <p className="text-2xl font-bold mb-3">{score}점</p>
-          
+          <div className="flex items-baseline gap-2 mb-4 py-3 px-4 rounded-xl bg-white/50 border border-black/5 shadow-inner">
+            <span className="text-3xl font-bold tabular-nums">{score}</span>
+            <span className="text-base font-medium opacity-80">점</span>
+          </div>
+
           {hasCorrection && (
-            <div className="mb-3 p-3 rounded-lg bg-white/60 border border-white/80">
-              <p className="text-xs font-medium mb-1 opacity-80">교정된 문장:</p>
-              <p className="text-sm font-medium">{corrected}</p>
+            <div className="mb-3 p-3 rounded-xl bg-white/60 border border-black/5 shadow-sm">
+              <p className="text-xs font-medium mb-1.5 opacity-80">교정된 문장</p>
+              <p className="text-sm font-medium leading-relaxed">{corrected}</p>
             </div>
           )}
-          
+
           {feedback && (
-            <div className="mb-3">
-              <p className="text-xs font-medium mb-1 opacity-80">피드백:</p>
-              <p className="text-sm opacity-90 whitespace-pre-line">{feedback}</p>
+            <div className="mb-3 p-3 rounded-xl bg-white/40 border border-black/5">
+              <p className="text-xs font-medium mb-1.5 opacity-80">피드백</p>
+              <p className="text-sm opacity-90 whitespace-pre-line leading-relaxed">{feedback}</p>
             </div>
           )}
-          
-          <p className="text-sm opacity-90">{reaction}</p>
+
+          <p className="text-sm opacity-90 leading-relaxed pt-1">{reaction}</p>
         </div>
       </div>
     </div>
