@@ -21,7 +21,7 @@ interface FreeTalkingMainScreenProps {
 }
 
 function getSubtitleTexts(turn: FreeTalkingConversationTurn | undefined): { en: string; ko: string } | null {
-  if (!turn || turn.speaker !== "ai") return null;
+  if (!turn || turn.speaker !== "ai" || turn.text == null) return null;
   return { en: turn.text, ko: turn.koText ?? turn.text };
 }
 
@@ -95,7 +95,7 @@ export default function FreeTalkingMainScreen({
   // AI 턴: 카운트다운 끝난 뒤 TTS 재생 → 띵동 → 다음 턴(유저)으로 전환
   useEffect(() => {
     if (showCountdown || !currentTurn || currentTurn.speaker !== "ai" || isDone) return;
-    speak(currentTurn.text);
+    speak(currentTurn.text ?? "");
     const isLastTurn = currentTurnIndex === conversation.length - 1;
     const delay = 4500; // 듣는 시간 4.5초 (초등학생용 - 힌트·스피커 버튼 여유)
     const t = setTimeout(() => {

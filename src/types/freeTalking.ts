@@ -11,7 +11,8 @@ export interface FreeTalkingPartner {
 export interface FreeTalkingConversationTurn {
   turn: number;
   speaker: "ai" | "user";
-  text: string;
+  /** AI 턴에는 필수, user 턴에는 없음(힌트만 있음) */
+  text?: string;
   /** AI 발화 한글 번역 (자막용) */
   koText?: string;
   expectedLevel?: string;
