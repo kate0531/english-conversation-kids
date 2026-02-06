@@ -1,0 +1,88 @@
+"use client";
+
+import type { FreeTalkingSampleLine } from "@/types/freeTalking";
+import { playClick, playPopup } from "@/lib/sounds";
+
+interface FreeTalkingPerfectSampleScreenProps {
+  sampleConversation: FreeTalkingSampleLine[];
+  partnerName?: string;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+/** 100점 샘플 대화 전용 화면 — 보라 테마, 세련된 레이아웃 */
+export default function FreeTalkingPerfectSampleScreen({
+  sampleConversation,
+  partnerName = "Hailey",
+  onNext,
+  onBack,
+}: FreeTalkingPerfectSampleScreenProps) {
+  return (
+    <div className="min-h-screen flex flex-col bg-gradient-to-b from-violet-50/95 via-white to-violet-50/80">
+      <header className="flex-shrink-0 sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-violet-200/80 shadow-sm">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              onBack();
+            }}
+            className="w-10 h-10 rounded-xl border-2 border-violet-200 bg-white text-gray-600 hover:bg-violet-50 flex items-center justify-center text-lg transition"
+          >
+            ←
+          </button>
+          <h1 className="text-base font-semibold text-violet-700">Say It Like a Pro</h1>
+          <div className="w-10" />
+        </div>
+      </header>
+
+      <main className="flex-1 px-4 py-6 max-w-xl mx-auto w-full flex flex-col">
+        <p className="text-violet-600/90 text-sm font-medium mb-4 text-center">
+          미션 완료까지 얼마 안 남았어요!
+        </p>
+
+        <div className="flex-1 space-y-4 overflow-y-auto">
+          {sampleConversation.map((line, i) => (
+            <div
+              key={i}
+              className={`flex ${line.speaker === "ai" ? "justify-start" : "justify-end"}`}
+            >
+              <div
+                className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${
+                  line.speaker === "ai"
+                    ? "bg-white border border-violet-100 text-gray-800 rounded-bl-md"
+                    : "bg-gradient-to-br from-violet-500 to-violet-600 text-white rounded-br-md"
+                }`}
+              >
+                {line.speaker === "ai" && (
+                  <span className="text-xs font-medium text-violet-500 block mb-1">
+                    {partnerName}
+                  </span>
+                )}
+                {line.speaker === "user" && (
+                  <span className="text-xs font-medium text-violet-200 block mb-1 text-right">
+                    나
+                  </span>
+                )}
+                <p className={line.speaker === "user" ? "text-right" : ""}>{line.text}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex-shrink-0 pt-6 pb-2">
+          <button
+            type="button"
+            onClick={() => {
+              playPopup();
+              onNext();
+            }}
+            className="w-full rounded-2xl py-4 font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 shadow-lg shadow-violet-200/50 transition active:scale-[0.98]"
+          >
+            샘플 따라 말하기
+          </button>
+        </div>
+      </main>
+    </div>
+  );
+}

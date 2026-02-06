@@ -36,6 +36,7 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
   const [supported, setSupported] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const onResultCb = useRef(options?.onResult);
+  const lastTranscriptRef = useRef<string>("");
   onResultCb.current = options?.onResult;
 
   useEffect(() => {
@@ -52,13 +53,23 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
       recognition.interimResults = true;
 
       recognition.onresult = (e: SpeechRecognitionEvent) => {
+        if (e.results.length === 0) return;
         const result = e.results[e.results.length - 1];
-        const transcript = result[0].transcript;
+        const transcript = (result[0] && result[0].transcript) ? String(result[0].transcript).trim() : "";
+        if (!transcript) return;
+        lastTranscriptRef.current = transcript;
         if (result.isFinal) {
-          onResultCb.current?.(transcript.trim());
+          onResultCb.current?.(transcript);
+          lastTranscriptRef.current = "";
         }
       };
-      recognition.onend = () => setIsListening(false);
+      recognition.onend = () => {
+        if (lastTranscriptRef.current) {
+          onResultCb.current?.(lastTranscriptRef.current);
+          lastTranscriptRef.current = "";
+        }
+        setIsListening(false);
+      };
       recognition.onerror = () => setIsListening(false);
       recognitionRef.current = recognition;
     }
@@ -77,10 +88,13 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
 
   const start = useCallback(() => {
     if (!recognitionRef.current || isListening) return;
+    lastTranscriptRef.current = "";
     try {
       recognitionRef.current.start();
       setIsListening(true);
-    } catch (_) {}
+    } catch (_) {
+      setIsListening(false);
+    }
   }, [isListening]);
 
   const stop = useCallback(() => {

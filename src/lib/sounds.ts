@@ -1,21 +1,34 @@
 /**
  * Web Audio API로 재생하는 효과음 (클릭 / 코너 전환 / 팝업 등장)
+ * 브라우저 autoplay 정책: 사용자 상호작용 후 AudioContext.resume() 필요
  */
+
+let audioContext: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
-  return new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+  if (audioContext) return audioContext;
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+  audioContext = new Ctx();
+  return audioContext;
 }
 
-function playTone(
+/** 첫 사용자 상호작용 시 호출하여 오디오 잠금 해제 (브라우저 autoplay 정책) */
+export function unlockAudioContext(): void {
+  const ctx = getAudioContext();
+  if (ctx?.state === "suspended") {
+    ctx.resume();
+  }
+}
+
+function runTone(
+  ctx: AudioContext,
   frequency: number,
   duration: number,
-  type: OscillatorType = "sine",
-  volume = 0.15
+  type: OscillatorType,
+  volume: number
 ): void {
-  const ctx = getAudioContext();
-  if (!ctx) return;
-
   const oscillator = ctx.createOscillator();
   const gainNode = ctx.createGain();
 
@@ -36,58 +49,143 @@ function playTone(
   oscillator.stop(ctx.currentTime + duration);
 }
 
-/** 버튼 클릭 시 짧은 클릭음 */
+function playTone(
+  frequency: number,
+  duration: number,
+  type: OscillatorType = "sine",
+  volume = 0.15
+): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => runTone(ctx, frequency, duration, type, volume)).catch(() => {});
+  } else {
+    runTone(ctx, frequency, duration, type, volume);
+  }
+}
+
+/** 버튼 클릭 시 짧은 클릭음 (예외 발생해도 호출자에 영향 없도록 처리) */
 export function playClick(): void {
-  playTone(800, 0.06, "sine", 0.12);
+  try {
+    playTone(800, 0.06, "sine", 0.12);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runTransition(ctx: AudioContext): void {
+  const duration = 0.25;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(523, ctx.currentTime);
+  osc.frequency.setValueAtTime(659, ctx.currentTime + duration * 0.5);
+  osc.frequency.setValueAtTime(784, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+  gain.gain.setValueAtTime(0.12, ctx.currentTime + duration);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration + 0.1);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration + 0.1);
 }
 
 /** 코너가 바뀌었을 때 전환 효과음 (예: Conversation → Free Talking) */
 export function playTransition(): void {
   const ctx = getAudioContext();
   if (!ctx) return;
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => runTransition(ctx));
+  } else {
+    runTransition(ctx);
+  }
+}
 
-  const duration = 0.25;
+function runDing(ctx: AudioContext): void {
+  const duration = 0.15;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-
   osc.connect(gain);
   gain.connect(ctx.destination);
-
   osc.type = "sine";
-  osc.frequency.setValueAtTime(523, ctx.currentTime);
-  osc.frequency.setValueAtTime(659, ctx.currentTime + duration * 0.5);
-  osc.frequency.setValueAtTime(784, ctx.currentTime + duration);
-
+  osc.frequency.setValueAtTime(880, ctx.currentTime);
+  osc.frequency.setValueAtTime(1100, ctx.currentTime + duration * 0.5);
   gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.02);
-  gain.gain.setValueAtTime(0.12, ctx.currentTime + duration);
-  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration + 0.1);
-
+  gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
   osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + duration + 0.1);
+  osc.stop(ctx.currentTime + duration);
+}
+
+/** 그린라이트 + 띵동 (마이크 감지 시) */
+export function playDing(): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => runDing(ctx));
+  } else {
+    runDing(ctx);
+  }
+}
+
+function runPopup(ctx: AudioContext): void {
+  const duration = 0.2;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(392, ctx.currentTime);
+  osc.frequency.setValueAtTime(523, ctx.currentTime + duration * 0.5);
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.03);
+  gain.gain.setValueAtTime(0.15, ctx.currentTime + duration);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration + 0.08);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration + 0.08);
+}
+
+/** 힌트 버블 클릭 시 펑! 터지는 효과음 */
+export function playPop(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runPop(ctx)).catch(() => {});
+    } else {
+      runPop(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runPop(ctx: AudioContext): void {
+  const duration = 0.15;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(660, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + duration * 0.3);
+  osc.frequency.setValueAtTime(800, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
 }
 
 /** 결과/리포트 팝업 등장 시 효과음 */
 export function playPopup(): void {
   const ctx = getAudioContext();
   if (!ctx) return;
-
-  const duration = 0.2;
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(392, ctx.currentTime);
-  osc.frequency.setValueAtTime(523, ctx.currentTime + duration * 0.5);
-
-  gain.gain.setValueAtTime(0, ctx.currentTime);
-  gain.gain.linearRampToValueAtTime(0.15, ctx.currentTime + 0.03);
-  gain.gain.setValueAtTime(0.15, ctx.currentTime + duration);
-  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration + 0.08);
-
-  osc.start(ctx.currentTime);
-  osc.stop(ctx.currentTime + duration + 0.08);
+  if (ctx.state === "suspended") {
+    ctx.resume().then(() => runPopup(ctx));
+  } else {
+    runPopup(ctx);
+  }
 }

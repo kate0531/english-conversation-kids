@@ -1,6 +1,7 @@
 "use client";
 
 import { playClick } from "@/lib/sounds";
+import Link from "next/link";
 
 interface GateScreenProps {
   onSelectWriting: () => void;
@@ -15,7 +16,7 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
         <p className="text-sm text-gray-500">코너를 선택하세요.</p>
       </div>
 
-      <div className="relative flex flex-col sm:flex-row gap-4 w-full max-w-sm">
+      <div className="relative flex flex-col gap-4 w-full max-w-sm">
         <button
           type="button"
           onClick={() => {
@@ -40,6 +41,15 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
           <span className="font-semibold text-gray-800 block">Speaking Time</span>
           <span className="text-sm text-gray-500 mt-1 block">대화 연습</span>
         </button>
+        <Link
+          href="/free-talking"
+          onClick={playClick}
+          className="flex-1 rounded-2xl p-6 border-2 border-rose-400 bg-white/90 shadow-md hover:bg-rose-50 hover:border-rose-500 hover:shadow-lg transition-all duration-200 text-center no-underline"
+        >
+          <span className="text-2xl mb-2 block">💬</span>
+          <span className="font-semibold text-gray-800 block">Free Talking Time</span>
+          <span className="text-sm text-gray-500 mt-1 block">상황 미션 연습</span>
+        </Link>
       </div>
     </div>
   );
