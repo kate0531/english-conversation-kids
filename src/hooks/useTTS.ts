@@ -121,7 +121,86 @@ export interface SampleLine {
 const PAUSE_BETWEEN_LINES_MS = 380;
 const DING_BEFORE_NEXT_MS = 180;
 
-/** Hailey + 나 대화 전체 순차 재생 (Hailey=여성, 나=어린아이, 턴마다 띵!) */
+/** OpenAI TTS API로 한 문장 재생. API 사용 불가 시 { ok: false } 반환 */
+async function playTTSViaAPI(
+  text: string,
+  voice: "nova" | "echo"
+): Promise<{ ok: true } | { ok: false }> {
+  const res = await fetch("/api/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: normalizeForEnglish(text), voice }),
+  });
+  if (!res.ok) return { ok: false };
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  return new Promise((resolve) => {
+    const audio = new Audio(url);
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      resolve({ ok: true });
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ ok: true });
+    };
+    audio.volume = 0.98;
+    audio.play().catch(() => resolve({ ok: true }));
+  });
+}
+
+/** Say It Like a Pro 전용: OpenAI TTS로 대화 재생 (nova=활기차고 감정 있는 여성, echo=대화형 남성/아이). API 불가 시 내장 TTS로 대체 */
+export function playSampleConversationWithOpenAI(
+  lines: SampleLine[],
+  onEnd?: () => void
+): () => void {
+  let cancelled = false;
+  let index = 0;
+  let prevSpeaker: "ai" | "user" | null = null;
+
+  async function playNext() {
+    if (cancelled || index >= lines.length) {
+      if (!cancelled) onEnd?.();
+      return;
+    }
+    const line = lines[index++];
+    const text = line.text?.trim();
+    const speakerChanged = prevSpeaker != null && prevSpeaker !== line.speaker;
+    prevSpeaker = line.speaker;
+
+    if (!text) {
+      setTimeout(playNext, PAUSE_BETWEEN_LINES_MS);
+      return;
+    }
+
+    const doPlay = async () => {
+      if (cancelled) return;
+      const voice = line.speaker === "ai" ? "nova" : "echo";
+      const result = await playTTSViaAPI(text, voice);
+      if (cancelled) return;
+      if (!result.ok) {
+        cancelled = true;
+        playSampleConversation(lines, onEnd);
+        return;
+      }
+      setTimeout(playNext, PAUSE_BETWEEN_LINES_MS);
+    };
+
+    if (speakerChanged) {
+      playDing();
+      setTimeout(() => doPlay(), DING_BEFORE_NEXT_MS);
+    } else {
+      doPlay();
+    }
+  }
+
+  playNext();
+  return () => {
+    cancelled = true;
+  };
+}
+
+/** Hailey + 나 대화 전체 순차 재생 (Hailey=여성, 나=어린아이, 턴마다 띵!) - 내장 TTS */
 export function playSampleConversation(
   lines: SampleLine[],
   onEnd?: () => void

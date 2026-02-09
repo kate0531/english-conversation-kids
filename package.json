@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:openai": "node --env-file=.env.local scripts/test-openai.mjs"
   },
   "dependencies": {
     "next": "^14.2.18",

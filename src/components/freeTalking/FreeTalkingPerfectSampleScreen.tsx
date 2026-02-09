@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import type { FreeTalkingSampleLine } from "@/types/freeTalking";
 import { playClick, playPopup } from "@/lib/sounds";
-import { playSampleConversation } from "@/hooks/useTTS";
+import { playSampleConversationWithOpenAI } from "@/hooks/useTTS";
 
 interface FreeTalkingPerfectSampleScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
@@ -24,7 +24,7 @@ export default function FreeTalkingPerfectSampleScreen({
   const handlePlaySample = useCallback(() => {
     playClick();
     setIsPlayingSample(true);
-    playSampleConversation(sampleConversation, () => setIsPlayingSample(false));
+    playSampleConversationWithOpenAI(sampleConversation, () => setIsPlayingSample(false));
   }, [sampleConversation]);
 
   return (

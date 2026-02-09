@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getOpenAIApiKey } from "@/lib/openai";
 
 function sampleAnalysis(paragraph: string): string {
   const lineCount = paragraph.trim().split(/\n/).filter(Boolean).length;
@@ -15,7 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "paragraph required" }, { status: 400 });
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    const apiKey = getOpenAIApiKey();
     if (!apiKey) {
       return NextResponse.json({ analysis: sampleAnalysis(paragraph) }, { status: 200 });
     }

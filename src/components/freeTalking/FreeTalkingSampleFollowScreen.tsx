@@ -12,9 +12,11 @@ interface FreeTalkingSampleFollowScreenProps {
   onBack: () => void;
 }
 
-/** 따라 말할 문장만 추출 (user 발화만) */
+/** 따라 말할 문장만 추출 (user 발화만, 빈 문장 제외) */
 function getUserSentences(conversation: FreeTalkingSampleLine[]): string[] {
-  return conversation.filter((line) => line.speaker === "user").map((line) => line.text);
+  return conversation
+    .filter((line) => line.speaker === "user" && line.text.trim().length > 0)
+    .map((line) => line.text.trim());
 }
 
 /** 단어 단위로 정오답 비교 → 맞으면 초록, 틀리면 빨강 */

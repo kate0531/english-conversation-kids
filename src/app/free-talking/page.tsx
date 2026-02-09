@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import FreeTalkingGateScreen from "@/components/freeTalking/FreeTalkingGateScreen";
 import FreeTalkingMainScreen from "@/components/freeTalking/FreeTalkingMainScreen";
 import FreeTalkingPerfectSampleScreen from "@/components/freeTalking/FreeTalkingPerfectSampleScreen";
@@ -9,8 +9,31 @@ import FreeTalkingSampleFollowScreen from "@/components/freeTalking/FreeTalkingS
 import SentenceEvaluationScreen from "@/components/freeTalking/SentenceEvaluationScreen";
 import TaskScoreScreen from "@/components/freeTalking/TaskScoreScreen";
 import { getScenarioForTopic } from "@/data/freeTalkingData";
-import type { FreeTalkingScenario } from "@/types/freeTalking";
+import type { FreeTalkingScenario, FreeTalkingSampleLine } from "@/types/freeTalking";
 import Link from "next/link";
+
+/** 시나리오 + (교정/추천 문장 우선, 없으면 내가 말한 문장)으로 들어보기/따라 말하기용 대화 생성 */
+function buildSampleConversation(
+  scenario: FreeTalkingScenario,
+  userAnswers: string[],
+  correctedSentences: string[]
+): FreeTalkingSampleLine[] {
+  const userLines =
+    correctedSentences.length === userAnswers.length
+      ? correctedSentences.map((s) => s.trim())
+      : userAnswers.map((s) => s.trim());
+  const lines: FreeTalkingSampleLine[] = [];
+  let userIndex = 0;
+  for (const turn of scenario.conversation) {
+    if (turn.speaker === "ai" && turn.text) {
+      lines.push({ speaker: "ai", text: turn.text });
+    } else if (turn.speaker === "user") {
+      const text = userLines[userIndex++] ?? "";
+      lines.push({ speaker: "user", text });
+    }
+  }
+  return lines;
+}
 
 type FreeTalkingStep =
   | "gate"
@@ -25,6 +48,7 @@ export default function FreeTalkingPage() {
   const [step, setStep] = useState<FreeTalkingStep>("gate");
   const [scenario, setScenario] = useState<FreeTalkingScenario | null>(null);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
+  const [correctedSentences, setCorrectedSentences] = useState<string[]>([]);
   const [totalScore, setTotalScore] = useState(0);
   const [tasks, setTasks] = useState<
     { id: string; sentence: string; targetScore: number; completed: boolean }[]
@@ -54,14 +78,13 @@ export default function FreeTalkingPage() {
   }, []);
 
   const handleSampleComplete = useCallback(() => {
-    // 목업: 말한 문장 3개 (고정)
-    setEvalSentences([
-      "I play soccer.",
-      "I play with my friends.",
-      "We play at the playground.",
-    ]);
+    const sentences =
+      correctedSentences.length === userAnswers.length
+        ? correctedSentences.filter((s) => s.trim().length > 0)
+        : userAnswers.filter((s) => s.trim().length > 0);
+    setEvalSentences(sentences);
     setStep("evaluation");
-  }, []);
+  }, [userAnswers, correctedSentences]);
 
   const handleEvaluationComplete = useCallback((score: number) => {
     setTotalScore((prev) => prev + score);
@@ -91,6 +114,11 @@ export default function FreeTalkingPage() {
     setStep("gate");
     setScenario(null);
     setUserAnswers([]);
+    setCorrectedSentences([]);
+  }, []);
+
+  const handleCorrectionsLoaded = useCallback((corrected: string[]) => {
+    setCorrectedSentences(corrected);
   }, []);
 
   const handleBackFromResult = useCallback(() => {
@@ -114,6 +142,14 @@ export default function FreeTalkingPage() {
     setTotalScore(0);
     setTasks([]);
   }, []);
+
+  const sampleConversationFromUser = useMemo(() => {
+    if (!scenario) return [];
+    return buildSampleConversation(scenario, userAnswers, correctedSentences);
+  }, [scenario, userAnswers, correctedSentences]);
+  const hasUserAnswers = userAnswers.length > 0;
+  const sayItLikeAProConversation =
+    scenario && hasUserAnswers ? sampleConversationFromUser : scenario?.perfectSampleConversation ?? [];
 
   if (step === "gate") {
     return (
@@ -145,6 +181,7 @@ export default function FreeTalkingPage() {
         userAnswers={userAnswers}
         onNext={handleResultNext}
         onBack={handleBackFromResult}
+        onCorrectionsLoaded={handleCorrectionsLoaded}
       />
     );
   }
@@ -152,7 +189,7 @@ export default function FreeTalkingPage() {
   if (step === "perfectSample") {
     return (
       <FreeTalkingPerfectSampleScreen
-        sampleConversation={scenario.perfectSampleConversation}
+        sampleConversation={sayItLikeAProConversation}
         partnerName={scenario.partner?.name}
         onNext={handlePerfectSampleNext}
         onBack={handleBackFromPerfectSample}
@@ -163,7 +200,7 @@ export default function FreeTalkingPage() {
   if (step === "sampleFollow") {
     return (
       <FreeTalkingSampleFollowScreen
-        sampleConversation={scenario.perfectSampleConversation}
+        sampleConversation={sayItLikeAProConversation}
         onComplete={handleSampleComplete}
         onBack={handleBackFromSample}
       />

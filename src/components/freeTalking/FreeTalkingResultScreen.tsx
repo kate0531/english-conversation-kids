@@ -12,6 +12,7 @@ interface FreeTalkingResultScreenProps {
   userAnswers: string[];
   onNext: () => void;
   onBack: () => void;
+  onCorrectionsLoaded?: (correctedSentences: string[]) => void;
 }
 
 export default function FreeTalkingResultScreen({
@@ -19,12 +20,57 @@ export default function FreeTalkingResultScreen({
   userAnswers,
   onNext,
   onBack,
+  onCorrectionsLoaded,
 }: FreeTalkingResultScreenProps) {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [showContent, setShowContent] = useState(false);
+  const [corrections, setCorrections] = useState<CorrectionPoint[]>(MOCK_CORRECTIONS);
+  const [summary, setSummary] = useState<string>(MOCK_SUMMARY);
+  const [loading, setLoading] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const corrections: CorrectionPoint[] = MOCK_CORRECTIONS;
   const { speak } = useTTS({ gender: "female" });
+
+  useEffect(() => {
+    if (!userAnswers.length) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    fetch("/api/free-talking/correct", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scenario, userAnswers }),
+    })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(res.statusText))))
+      .then((data: { corrections?: CorrectionPoint[]; summary?: string }) => {
+        if (cancelled) return;
+        const nextCorrections = Array.isArray(data.corrections) && data.corrections.length > 0
+          ? data.corrections
+          : MOCK_CORRECTIONS;
+        setCorrections(nextCorrections);
+        onCorrectionsLoaded?.(nextCorrections.map((c) => c.enCorrected));
+        if (typeof data.summary === "string" && data.summary.trim()) {
+          setSummary(data.summary.trim());
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCorrections(MOCK_CORRECTIONS);
+          setSummary(MOCK_SUMMARY);
+          onCorrectionsLoaded?.(MOCK_CORRECTIONS.map((c) => c.enCorrected));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scenario, userAnswers]);
+
+  useEffect(() => {
+    onCorrectionsLoaded?.(corrections.map((c) => c.enCorrected));
+  }, [corrections, onCorrectionsLoaded]);
 
   const playGuide = useCallback(() => {
     const audio = audioRef.current;
@@ -106,35 +152,47 @@ export default function FreeTalkingResultScreen({
           showContent ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        {/* 교정 포인트 5줄 */}
+        {/* 교정 포인트 */}
         <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
           <h2 className="text-sm font-bold text-pink-600 mb-3">교정 포인트</h2>
+          {loading && (
+            <p className="text-gray-500 text-sm mb-3">교정 내용을 불러오는 중이에요...</p>
+          )}
           <div className="space-y-3">
             {corrections.map((c, i) => (
               <div
                 key={i}
                 className="rounded-lg border border-pink-100 bg-pink-50/50 p-3 flex flex-col gap-2"
               >
-                <p className="text-gray-700 text-sm">{c.koExplanation}</p>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-green-700 font-medium text-sm">{c.enCorrected}</p>
-                  <button
-                    type="button"
-                    onClick={() => handlePlayCorrection(i)}
-                    className="flex-shrink-0 w-8 h-8 rounded-full bg-pink-200 text-pink-600 hover:bg-pink-300 flex items-center justify-center text-sm"
-                  >
-                    {playingIndex === i ? "▶" : "🔊"}
-                  </button>
+                <p className="text-gray-700 text-sm leading-relaxed break-words">
+                  {c.koExplanation}
+                </p>
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-green-700 font-medium text-sm break-words flex-1 min-w-0">
+                    {c.enCorrected}
+                  </p>
+                  <div className="flex flex-col items-end flex-shrink-0 gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handlePlayCorrection(i)}
+                      className="w-9 h-9 rounded-full bg-pink-200 text-pink-600 hover:bg-pink-300 flex items-center justify-center text-sm"
+                    >
+                      {playingIndex === i ? "▶" : "🔊"}
+                    </button>
+                    <span className="text-xs text-pink-600/80">
+                      들어보고 따라 말해보기
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* 전체 대화 맥락 요약 */}
+        {/* 문법·발화 코멘트 */}
         <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
-          <h2 className="text-sm font-bold text-pink-600 mb-2">대화 요약</h2>
-          <p className="text-gray-700 text-sm leading-relaxed">{MOCK_SUMMARY}</p>
+          <h2 className="text-sm font-bold text-pink-600 mb-2">문법·발화 코멘트</h2>
+          <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{summary}</p>
         </section>
 
         <button

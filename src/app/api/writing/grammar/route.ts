@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getOpenAIApiKey } from "@/lib/openai";
 
 function sampleGrammarCheck(sentence: string): { corrected: string; feedback: string } {
   const s = sentence.trim();
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "sentence required" }, { status: 400 });
     }
 
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    const apiKey = getOpenAIApiKey();
     if (!apiKey) {
       return NextResponse.json(sampleGrammarCheck(sentence), { status: 200 });
     }

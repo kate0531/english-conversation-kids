@@ -1,4 +1,5 @@
 import type { QuestionItem } from "@/types/conversation";
+import { getOpenAIApiKey } from "@/lib/openai";
 
 export interface CorrectionResult {
   corrected: string;
@@ -14,8 +15,7 @@ export async function correctWithGPT(
   userAnswer: string,
   question: QuestionItem
 ): Promise<CorrectionResult | null> {
-  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-  
+  const apiKey = getOpenAIApiKey();
   if (!apiKey) {
     console.warn("OpenAI API key not found. Skipping GPT correction.");
     return null;
