@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo } from "react";
 import type { FreeTalkingSampleLine } from "@/types/freeTalking";
 import VoiceMicIcon from "@/components/VoiceMicIcon";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
-import { playClick } from "@/lib/sounds";
+import { playClick, playDing, playBuzzer } from "@/lib/sounds";
 
 interface FreeTalkingSampleFollowScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
@@ -42,11 +42,21 @@ export default function FreeTalkingSampleFollowScreen({
   const targetSentence = sentences[currentIndex] ?? "";
   const isDone = currentIndex >= sentences.length;
 
-  const handleVoiceResult = useCallback((text: string) => {
-    if (!text?.trim()) return;
-    setUserSpokenText(text.trim());
-    setAnswered(true);
-  }, []);
+  const handleVoiceResult = useCallback(
+    (text: string) => {
+      if (!text?.trim()) return;
+      const spoken = text.trim();
+      setUserSpokenText(spoken);
+      setAnswered(true);
+      const parts = compareWithTarget(targetSentence, spoken);
+      if (parts.every((p) => p.correct)) {
+        playDing();
+      } else if (parts.some((p) => !p.correct)) {
+        playBuzzer();
+      }
+    },
+    [targetSentence]
+  );
 
   const { isListening, toggle, supported } = useSpeechRecognition({
     lang: "en-US",
@@ -92,7 +102,7 @@ export default function FreeTalkingSampleFollowScreen({
           >
             ←
           </button>
-          <h1 className="text-base font-semibold text-violet-600">샘플 따라 말하기</h1>
+          <h1 className="text-base font-semibold text-violet-600">Say It Like a Pro</h1>
           <span className="text-sm text-gray-500">
             {currentIndex + 1}/{sentences.length}
           </span>

@@ -1,13 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { FreeTalkingScenario } from "@/types/freeTalking";
 import type { CorrectionPoint } from "@/types/freeTalking";
 import { MOCK_CORRECTIONS, MOCK_SUMMARY } from "@/data/freeTalkingCorrections";
 import { useTTS } from "@/hooks/useTTS";
 import { playClick } from "@/lib/sounds";
-
-const GUIDE_AUDIO = "/sample.mp3";
 
 interface FreeTalkingResultScreenProps {
   scenario: FreeTalkingScenario;
@@ -24,16 +22,48 @@ export default function FreeTalkingResultScreen({
 }: FreeTalkingResultScreenProps) {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [showContent, setShowContent] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const corrections: CorrectionPoint[] = MOCK_CORRECTIONS;
   const { speak } = useTTS({ gender: "female" });
 
-  // 음원 먼저 재생 → 끝나면 결과 화면 표시 (전환 부드럽게)
-  useEffect(() => {
-    const audio = new Audio(GUIDE_AUDIO);
+  const playGuide = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
     audio.volume = 0.38;
-    audio.play().catch(() => setShowContent(true));
-    audio.onended = () => setTimeout(() => setShowContent(true), 300);
+    audio.currentTime = 0;
+    const play = () => {
+      audio.play().catch(() => setShowContent(true));
+    };
+    if (audio.readyState >= 2) {
+      play();
+    } else {
+      audio.addEventListener("canplay", play, { once: true });
+    }
   }, []);
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      const audio = audioRef.current;
+      if (!audio) {
+        setShowContent(true);
+        return;
+      }
+      const onEnded = () => setTimeout(() => setShowContent(true), 300);
+      const onError = () => setShowContent(true);
+      audio.addEventListener("ended", onEnded);
+      audio.addEventListener("error", onError);
+      cleanup = () => {
+        audio.removeEventListener("ended", onEnded);
+        audio.removeEventListener("error", onError);
+      };
+      playGuide();
+    }, 100);
+    return () => {
+      clearTimeout(timer);
+      cleanup?.();
+    };
+  }, [playGuide]);
 
   const handlePlayCorrection = (index: number) => {
     playClick();
@@ -44,6 +74,7 @@ export default function FreeTalkingResultScreen({
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-rose-50 via-pink-50/80 to-amber-50/70 overflow-y-auto">
+      <audio ref={audioRef} src="/sample1.mp3" preload="auto" className="hidden" />
       <header className="flex-shrink-0 sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-pink-200">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <button
@@ -57,7 +88,16 @@ export default function FreeTalkingResultScreen({
             ←
           </button>
           <h1 className="text-base font-semibold text-pink-600">결과</h1>
-          <div className="w-10" />
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              playGuide();
+            }}
+            className="text-sm font-medium text-pink-600 hover:text-pink-700 underline"
+          >
+            가이드 듣기
+          </button>
         </div>
       </header>
 

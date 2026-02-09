@@ -189,3 +189,34 @@ export function playPopup(): void {
     runPopup(ctx);
   }
 }
+
+function runBuzzer(ctx: AudioContext): void {
+  const duration = 0.2;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "square";
+  osc.frequency.setValueAtTime(200, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(80, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+/** 정답 아님 / 틀렸을 때 땡! 효과음 */
+export function playBuzzer(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runBuzzer(ctx)).catch(() => {});
+    } else {
+      runBuzzer(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
