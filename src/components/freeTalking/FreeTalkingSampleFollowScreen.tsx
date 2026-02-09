@@ -17,6 +17,18 @@ function getUserSentences(conversation: FreeTalkingSampleLine[]): string[] {
   return conversation.filter((line) => line.speaker === "user").map((line) => line.text);
 }
 
+/** 단어 단위로 정오답 비교 → 맞으면 초록, 틀리면 빨강 */
+function compareWithTarget(target: string, spoken: string): { text: string; correct: boolean }[] {
+  const norm = (s: string) => s.toLowerCase().replace(/[.,!?']/g, "").trim();
+  const targetWords = target.split(/\s+/).filter(Boolean);
+  const spokenWords = spoken.trim().split(/\s+/).filter(Boolean);
+  return spokenWords.map((word, i) => {
+    const expected = targetWords[i];
+    const correct = expected != null && norm(word) === norm(expected);
+    return { text: word, correct };
+  });
+}
+
 export default function FreeTalkingSampleFollowScreen({
   sampleConversation,
   onComplete,
@@ -98,9 +110,19 @@ export default function FreeTalkingSampleFollowScreen({
         {/* 아래: 내가 말한 문장 (떨어지는 애니메이션) */}
         <div className="w-full max-w-md min-h-[80px] rounded-2xl border-2 border-dashed border-violet-100 bg-violet-50/50 p-4 mb-6 flex items-center justify-center">
           {userSpokenText ? (
-            <p className="text-center text-base font-medium text-violet-700 animate-fall-down">
-              {userSpokenText}
-            </p>
+            (() => {
+              const parts = compareWithTarget(targetSentence, userSpokenText);
+              return (
+                <p className="text-center text-base font-medium animate-fall-down leading-relaxed">
+                  {parts.map(({ text, correct }, i) => (
+                    <span key={i} className={correct ? "text-green-600" : "text-red-600"}>
+                      {text}
+                      {i < parts.length - 1 ? " " : ""}
+                    </span>
+                  ))}
+                </p>
+              );
+            })()
           ) : !supported ? (
             <p className="text-sm text-amber-700 text-center">
               이 브라우저는 음성 인식을 지원하지 않습니다. Chrome(크롬)에서 시도해 주세요.

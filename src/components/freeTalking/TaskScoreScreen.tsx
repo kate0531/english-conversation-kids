@@ -60,6 +60,8 @@ export default function TaskScoreScreen({
     }, 800);
   };
 
+  const allTasksCompleted = tasks.length > 0 && tasks.every((t) => t.completed);
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-rose-50 via-pink-50/80 to-rose-50/60 overflow-y-auto">
       <header className="flex-shrink-0 sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-pink-200">
@@ -119,8 +121,7 @@ export default function TaskScoreScreen({
             <button
               type="button"
               onClick={toggle}
-              disabled={isListening}
-              title={isListening ? "듣는 중..." : "마이크로 따라 말하기"}
+              title={isListening ? "클릭하면 중지" : "마이크로 따라 말하기"}
               className="flex items-center justify-center w-14 h-14 rounded-full border-2 border-pink-200 bg-pink-50 text-pink-600 hover:bg-pink-100 disabled:opacity-70 transition"
             >
               <VoiceMicIcon size={24} className="text-pink-600" />
@@ -144,6 +145,21 @@ export default function TaskScoreScreen({
             +10점! 🎉
           </div>
         </div>
+      )}
+
+      {/* 코너 완료 시 어두운 막 + 클릭하면 홈으로 */}
+      {allTasksCompleted && (
+        <button
+          type="button"
+          onClick={() => {
+            playClick();
+            onBack();
+          }}
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-pink-400"
+          aria-label="홈으로 돌아가기"
+        >
+          <p className="text-white/90 text-sm font-medium mt-32">클릭하면 홈으로</p>
+        </button>
       )}
     </div>
   );

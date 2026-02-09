@@ -1,28 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { FreeTalkingScenario } from "@/types/freeTalking";
 import type { CorrectionPoint } from "@/types/freeTalking";
 import { MOCK_CORRECTIONS, MOCK_SUMMARY } from "@/data/freeTalkingCorrections";
 import { useTTS } from "@/hooks/useTTS";
 import { playClick } from "@/lib/sounds";
 
+const GUIDE_AUDIO = "/sample.mp3";
+
 interface FreeTalkingResultScreenProps {
   scenario: FreeTalkingScenario;
   userAnswers: string[];
   onNext: () => void;
   onBack: () => void;
-}
-
-/** TTS mock - 구조만 구현, 실제 재생 안 함 */
-function useMockTTS() {
-  const { speak } = useTTS({ gender: "female" });
-  return {
-    speak: (text: string) => {
-      // mock: 구조만, 실제 TTS는 speak 호출 (기존 useTTS 활용)
-      speak(text);
-    },
-  };
 }
 
 export default function FreeTalkingResultScreen({
@@ -32,8 +23,17 @@ export default function FreeTalkingResultScreen({
   onBack,
 }: FreeTalkingResultScreenProps) {
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
+  const [showContent, setShowContent] = useState(false);
   const corrections: CorrectionPoint[] = MOCK_CORRECTIONS;
-  const { speak } = useMockTTS();
+  const { speak } = useTTS({ gender: "female" });
+
+  // 음원 먼저 재생 → 끝나면 결과 화면 표시 (전환 부드럽게)
+  useEffect(() => {
+    const audio = new Audio(GUIDE_AUDIO);
+    audio.volume = 0.38;
+    audio.play().catch(() => setShowContent(true));
+    audio.onended = () => setTimeout(() => setShowContent(true), 300);
+  }, []);
 
   const handlePlayCorrection = (index: number) => {
     playClick();
@@ -61,7 +61,11 @@ export default function FreeTalkingResultScreen({
         </div>
       </header>
 
-      <main className="flex-1 px-4 py-6 max-w-xl mx-auto w-full space-y-6">
+      <main
+        className={`flex-1 px-4 py-6 max-w-xl mx-auto w-full space-y-6 transition-opacity duration-500 ${
+          showContent ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      >
         {/* 교정 포인트 5줄 */}
         <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
           <h2 className="text-sm font-bold text-pink-600 mb-3">교정 포인트</h2>

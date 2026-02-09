@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useCallback } from "react";
 import type { FreeTalkingSampleLine } from "@/types/freeTalking";
 import { playClick, playPopup } from "@/lib/sounds";
+import { playSampleConversation } from "@/hooks/useTTS";
 
 interface FreeTalkingPerfectSampleScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
@@ -17,6 +19,14 @@ export default function FreeTalkingPerfectSampleScreen({
   onNext,
   onBack,
 }: FreeTalkingPerfectSampleScreenProps) {
+  const [isPlayingSample, setIsPlayingSample] = useState(false);
+
+  const handlePlaySample = useCallback(() => {
+    playClick();
+    setIsPlayingSample(true);
+    playSampleConversation(sampleConversation, () => setIsPlayingSample(false));
+  }, [sampleConversation]);
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-violet-50/95 via-white to-violet-50/80">
       <header className="flex-shrink-0 sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-violet-200/80 shadow-sm">
@@ -40,6 +50,17 @@ export default function FreeTalkingPerfectSampleScreen({
         <p className="text-violet-600/90 text-sm font-medium mb-4 text-center">
           미션 완료까지 얼마 안 남았어요!
         </p>
+
+        {/* 들어보기: Hailey + 나 대화 전체 재생 */}
+        <button
+          type="button"
+          onClick={handlePlaySample}
+          disabled={isPlayingSample}
+          className="mb-4 w-full inline-flex items-center justify-center gap-2 rounded-full border-2 border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-70"
+        >
+          <span>🔊</span>
+          <span>{isPlayingSample ? "재생 중..." : "들어보기"}</span>
+        </button>
 
         <div className="flex-1 space-y-4 overflow-y-auto">
           {sampleConversation.map((line, i) => (

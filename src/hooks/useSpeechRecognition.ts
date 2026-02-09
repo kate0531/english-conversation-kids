@@ -37,6 +37,7 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const onResultCb = useRef(options?.onResult);
   const lastTranscriptRef = useRef<string>("");
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   onResultCb.current = options?.onResult;
 
   useEffect(() => {
@@ -64,13 +65,23 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
         }
       };
       recognition.onend = () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
         if (lastTranscriptRef.current) {
           onResultCb.current?.(lastTranscriptRef.current);
           lastTranscriptRef.current = "";
         }
         setIsListening(false);
       };
-      recognition.onerror = () => setIsListening(false);
+      recognition.onerror = () => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+        setIsListening(false);
+      };
       recognitionRef.current = recognition;
     }
 
@@ -88,10 +99,23 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
 
   const start = useCallback(() => {
     if (!recognitionRef.current || isListening) return;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
     lastTranscriptRef.current = "";
     try {
       recognitionRef.current.start();
       setIsListening(true);
+      timeoutRef.current = setTimeout(() => {
+        timeoutRef.current = null;
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch (_) {}
+        }
+        setIsListening(false);
+      }, 12000);
     } catch (_) {
       setIsListening(false);
     }

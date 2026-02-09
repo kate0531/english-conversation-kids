@@ -85,7 +85,7 @@ function CountdownContent({
   return (
     <div className="text-center relative">
       {isGo && (
-        <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scale(0.7)" }} aria-hidden>
+        <div className="absolute inset-0 flex items-center justify-center" style={{ transform: "scale(0.4)" }} aria-hidden>
           <>
             <div
               className="absolute inset-0 flex items-center justify-center -m-16"
@@ -124,7 +124,7 @@ function CountdownContent({
         key={stepIndex}
         className={`relative inline-block font-lovely font-extrabold ${
           isGo
-            ? "text-6xl sm:text-8xl animate-go-burst"
+            ? "text-3xl sm:text-4xl animate-go-burst"
             : "text-6xl sm:text-7xl animate-countdown-bounce"
         }`}
         style={{
@@ -132,7 +132,6 @@ function CountdownContent({
           textShadow:
             "0 0 20px rgba(255,182,193,0.9), 0 0 40px rgba(255,105,180,0.5), 0 2px 12px rgba(0,0,0,0.15)",
           WebkitTextStroke: isGo ? "2px rgba(255,255,255,0.9)" : "1px rgba(255,255,255,0.6)",
-          ...(isGo ? { transform: "scale(0.7)" } : {}),
         }}
       >
         {STEPS[stepIndex]}
