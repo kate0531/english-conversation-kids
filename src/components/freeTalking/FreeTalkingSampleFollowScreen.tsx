@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useMemo } from "react";
 import type { FreeTalkingSampleLine } from "@/types/freeTalking";
-import VoiceMicIcon from "@/components/VoiceMicIcon";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { playClick, playDing, playBuzzer } from "@/lib/sounds";
 
@@ -62,7 +61,8 @@ export default function FreeTalkingSampleFollowScreen({
     [targetSentence]
   );
 
-  const { isListening, toggle, supported, sttError, clearSttError } = useSpeechRecognition({
+  const { isListening, start, stop, supported, sttError, clearSttError, interimText, isProcessing } =
+    useSpeechRecognition({
     lang: "en-US",
     onResult: handleVoiceResult,
   });
@@ -154,13 +154,19 @@ export default function FreeTalkingSampleFollowScreen({
               마이크 녹음을 사용할 수 없어요. Chrome에서 시도하거나 /api/stt(Whisper) 설정을 확인해 주세요.
             </p>
           ) : (
-            <p className="text-sm text-gray-400">
-              {isListening ? "듣는 중..." : "마이크를 눌러 따라 말해보세요"}
+            <p className="text-sm text-center">
+              {isListening && interimText.trim() ? (
+                <span className="text-gray-800/90 italic">말한 내용(예상): {interimText}</span>
+              ) : (
+                <span className="text-gray-400">
+                  {isProcessing ? "전사 중..." : isListening ? "듣는 중..." : "녹음 후 확인을 눌러주세요"}
+                </span>
+              )}
             </p>
           )}
         </div>
 
-        {/* 게임 버튼: 마이크 / 다음 */}
+        {/* 게임 버튼: 녹음 / 확인 / 다음 */}
         <div className="flex flex-col items-center gap-4">
           {answered ? (
             <button
@@ -171,15 +177,30 @@ export default function FreeTalkingSampleFollowScreen({
               다음 →
             </button>
           ) : (
-            <button
-              type="button"
-              onClick={supported ? toggle : undefined}
-              disabled={!supported}
-              className="inline-flex items-center gap-3 rounded-full px-8 py-4 font-medium text-white bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 shadow-lg transition active:scale-95 disabled:opacity-80 disabled:cursor-not-allowed"
-            >
-              <VoiceMicIcon size={24} className="text-white" />
-              <span className="leading-none">{isListening ? "듣는 중..." : supported ? "따라 말하기" : "음성 인식 미지원"}</span>
-            </button>
+            <div className="flex gap-2 w-full justify-center max-w-md">
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  if (!answered && !isProcessing) start();
+                }}
+                disabled={!supported || isProcessing || isListening}
+                className="flex-1 inline-flex items-center justify-center rounded-full border-2 border-violet-300 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-700 hover:bg-violet-100 transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap leading-none"
+              >
+                녹음
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  if (!answered && isListening) stop();
+                }}
+                disabled={!supported || isProcessing || !isListening}
+                className="flex-1 inline-flex items-center justify-center rounded-full border-2 border-violet-200 bg-white px-3 py-2 text-xs font-medium text-violet-700 hover:bg-violet-50 transition disabled:opacity-70 disabled:cursor-not-allowed whitespace-nowrap leading-none"
+              >
+                {isProcessing ? "확인중" : "확인"}
+              </button>
+            </div>
           )}
         </div>
       </main>

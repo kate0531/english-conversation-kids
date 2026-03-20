@@ -154,12 +154,15 @@ async function playTTSViaAPI(text: string, voice: string): Promise<{ ok: true } 
     audio.onerror = () => {
       URL.revokeObjectURL(url);
       if (currentTTSAudio === audio) currentTTSAudio = null;
-      resolve({ ok: false });
+      // 재생 오류가 나도(자동재생 제한 등) 진행은 막지 않음
+      resolve({ ok: true });
     };
     audio.volume = 0.98;
     audio.play().catch(() => {
       if (currentTTSAudio === audio) currentTTSAudio = null;
-      resolve({ ok: false });
+      // 브라우저 자동재생 제한 때문에 play()이 실패할 수 있음
+      // 실패해도 화면 자막/흐름은 진행되도록 ok:true 처리
+      resolve({ ok: true });
     });
   });
 }

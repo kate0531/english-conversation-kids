@@ -20,8 +20,36 @@ export default function SentenceEvaluationScreen({
 }: SentenceEvaluationScreenProps) {
   const [scaleIndex, setScaleIndex] = useState(0);
   const [restingAt30, setRestingAt30] = useState(false);
+  const [autoScoring, setAutoScoring] = useState(true);
+  const [autoError, setAutoError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // 자동 점수 계산: Whisper 결과 문장들을 GPT가 0-100으로 평가
+    const run = async () => {
+      setAutoScoring(true);
+      setAutoError(null);
+      try {
+        const res = await fetch("/api/free-talking/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sentences }),
+        });
+        if (!res.ok) throw new Error(`score failed: ${res.status}`);
+        const data = (await res.json()) as { score?: number };
+        const score = typeof data.score === "number" ? Math.round(data.score) : 0;
+        if (cancelled) return;
+        onComplete(score);
+      } catch {
+        if (cancelled) return;
+        setAutoError("자동 점수화를 실패했어요. 화면 아래에서 직접 눌러서 점수를 선택할 수 있어요.");
+        setAutoScoring(false);
+      }
+    };
+
+    void run();
+
     const sequence = [0, 1, 2, 3, 4, 3, 2, 1, 0];
     let step = 0;
     const id = setInterval(() => {
@@ -33,7 +61,10 @@ export default function SentenceEvaluationScreen({
       setScaleIndex(sequence[step]);
       step += 1;
     }, SCALE_MOVE_MS);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   const handleSubmit = (s: number) => {
@@ -71,6 +102,16 @@ export default function SentenceEvaluationScreen({
           <div className="px-4 py-3 bg-pink-50/80 border-b border-pink-200/80">
             <h2 className="text-sm font-semibold text-pink-800">오늘의 점수</h2>
           </div>
+          {autoScoring ? (
+            <div className="px-4 py-6 text-center text-sm text-gray-600">
+              점수 계산 중...
+            </div>
+          ) : null}
+          {autoError ? (
+            <div className="px-4 pb-2 text-center text-xs text-amber-700">
+              {autoError}
+            </div>
+          ) : null}
           <div className="relative w-full py-4 px-4 min-h-[3.5rem] flex flex-col justify-center">
             <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-pink-200 rounded -translate-y-1/2 pointer-events-none" />
             <div className="relative flex justify-between items-center">
@@ -79,6 +120,7 @@ export default function SentenceEvaluationScreen({
                   key={s}
                   type="button"
                   onClick={() => handleSubmit(s)}
+                  disabled={autoScoring}
                   className={`relative z-10 w-10 h-10 rounded-full border-2 font-semibold text-sm transition ${
                     scaleIndex === i && restingAt30 && s === 30
                       ? "border-pink-400 bg-pink-200 text-pink-800 animate-pulse ring-4 ring-pink-300/70"

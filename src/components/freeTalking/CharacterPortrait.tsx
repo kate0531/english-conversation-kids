@@ -34,6 +34,7 @@ export default function CharacterPortrait({
 }: CharacterPortraitProps) {
   const [hintDismissed, setHintDismissed] = useState(false);
   const [hintPopping, setHintPopping] = useState(false);
+  const [imgSrc, setImgSrc] = useState(imageUrl);
   const showHint = hintKeywords && hintKeywords.length > 0 && !hintDismissed;
 
   // 턴이 바뀌면 이번 턴 힌트를 다시 보이게 초기화
@@ -41,6 +42,11 @@ export default function CharacterPortrait({
     setHintDismissed(false);
     setHintPopping(false);
   }, [turnIndex]);
+
+  // imageUrl이 바뀌면 표시 소스도 갱신 (새로고침 시 랜덤 이미지 포함)
+  useEffect(() => {
+    setImgSrc(imageUrl);
+  }, [imageUrl]);
 
   const bgStyle = useMemo(
     () =>
@@ -82,8 +88,12 @@ export default function CharacterPortrait({
         <div className="relative w-[65%] aspect-square">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={imageUrl}
+            src={imgSrc}
             alt="대화 상대"
+            onError={() => {
+              // 랜덤 이미지 로딩 실패 시 기본 Hailey 이미지로 폴백
+              if (imgSrc !== PARTNER_IMAGE_FEMALE) setImgSrc(PARTNER_IMAGE_FEMALE);
+            }}
             className="absolute inset-0 w-full h-full object-cover object-top rounded-full"
           />
         </div>

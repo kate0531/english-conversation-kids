@@ -318,34 +318,133 @@ export const FREE_TALK_SCENARIOS: Record<string, FreeTalkingScenario> = {
 /** 배경 이미지 (visualKeywords 기반 mock URL) */
 export function getBackgroundImageUrl(keywords: string[]): string {
   const joined = (keywords.length ? keywords : ["school"]).join(" ").toLowerCase();
-  if (joined.includes("playground") || joined.includes("school")) {
+  // play / school area
+  if (
+    joined.includes("playground") ||
+    joined.includes("school") ||
+    joined.includes("soccer") ||
+    joined.includes("basketball") ||
+    joined.includes("sports") ||
+    joined.includes("play")
+  ) {
     return "https://images.unsplash.com/photo-1582657118090-af35eefb9958?w=800&q=80";
   }
-  if (joined.includes("park") || joined.includes("outside")) {
+  // outdoor park
+  if (
+    joined.includes("park") ||
+    joined.includes("outside") ||
+    joined.includes("swing") ||
+    joined.includes("run") ||
+    joined.includes("bike") ||
+    joined.includes("playground")
+  ) {
     return "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&q=80";
   }
-  if (joined.includes("home") || joined.includes("family") || joined.includes("cozy")) {
+  // family / home
+  if (
+    joined.includes("home") ||
+    joined.includes("family") ||
+    joined.includes("cozy") ||
+    joined.includes("mother") ||
+    joined.includes("father") ||
+    joined.includes("parents") ||
+    joined.includes("mom") ||
+    joined.includes("dad") ||
+    joined.includes("brother") ||
+    joined.includes("sister")
+  ) {
     return "https://images.unsplash.com/photo-1524758631624-e2822e304c36?w=800&q=80";
   }
-  if (joined.includes("hobb") || joined.includes("music") || joined.includes("sports")) {
+  // hobbies / music / reading / study
+  if (
+    joined.includes("hobb") ||
+    joined.includes("music") ||
+    joined.includes("sports") ||
+    joined.includes("drawing") ||
+    joined.includes("piano") ||
+    joined.includes("reading") ||
+    joined.includes("study") ||
+    joined.includes("chat")
+  ) {
     return "https://images.unsplash.com/photo-1461896836934-8bda835b7d36?w=800&q=80";
   }
-  if (joined.includes("food") || joined.includes("meal") || joined.includes("kitchen")) {
+  // food / meal
+  if (
+    joined.includes("food") ||
+    joined.includes("meal") ||
+    joined.includes("kitchen") ||
+    joined.includes("pizza") ||
+    joined.includes("rice") ||
+    joined.includes("chicken") ||
+    joined.includes("noodles") ||
+    joined.includes("kimchi") ||
+    joined.includes("burger") ||
+    joined.includes("snack")
+  ) {
     return "https://images.unsplash.com/photo-1493770348161-369560ae357d?w=800&q=80";
   }
-  if (joined.includes("shop") || joined.includes("mall") || joined.includes("store")) {
+  // shopping
+  if (
+    joined.includes("shop") ||
+    joined.includes("mall") ||
+    joined.includes("store") ||
+    joined.includes("books") ||
+    joined.includes("toys") ||
+    joined.includes("clothes") ||
+    joined.includes("shoes") ||
+    joined.includes("snacks") ||
+    joined.includes("supermarket") ||
+    joined.includes("online")
+  ) {
     return "https://images.unsplash.com/photo-1555529669-568a5be58e1a?w=800&q=80";
   }
-  if (joined.includes("weather") || joined.includes("sky") || joined.includes("season")) {
+  // weather
+  if (
+    joined.includes("weather") ||
+    joined.includes("sky") ||
+    joined.includes("season") ||
+    joined.includes("sunny") ||
+    joined.includes("rainy") ||
+    joined.includes("snow") ||
+    joined.includes("cloudy") ||
+    joined.includes("windy") ||
+    joined.includes("hot") ||
+    joined.includes("cold")
+  ) {
     return "https://images.unsplash.com/photo-1433863448220-78aaa064dd47?w=800&q=80";
   }
-  if (joined.includes("animal") || joined.includes("zoo") || joined.includes("pet")) {
+  // animals
+  if (
+    joined.includes("animal") ||
+    joined.includes("zoo") ||
+    joined.includes("pet") ||
+    joined.includes("dog") ||
+    joined.includes("cat") ||
+    joined.includes("rabbit") ||
+    joined.includes("dolphin") ||
+    joined.includes("fish")
+  ) {
     return "https://images.unsplash.com/photo-1474511320723-9a56873867b5?w=800&q=80";
   }
-  if (joined.includes("weekend") || joined.includes("calendar") || joined.includes("relax")) {
+  // weekend plans
+  if (
+    joined.includes("weekend") ||
+    joined.includes("calendar") ||
+    joined.includes("relax") ||
+    joined.includes("saturday") ||
+    joined.includes("sunday")
+  ) {
     return "https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&q=80";
   }
-  if (joined.includes("friend") || joined.includes("together")) {
+  // friends
+  if (
+    joined.includes("friend") ||
+    joined.includes("friends") ||
+    joined.includes("together") ||
+    joined.includes("class") ||
+    joined.includes("same") ||
+    joined.includes("school")
+  ) {
     return "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=800&q=80";
   }
   return "https://images.unsplash.com/photo-1582657118090-af35eefb9958?w=800&q=80";
