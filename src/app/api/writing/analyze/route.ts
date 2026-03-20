@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIApiKey } from "@/lib/openai";
+import { getPrompt } from "@/lib/prompts";
 
 function sampleAnalysis(paragraph: string): string {
   const lineCount = paragraph.trim().split(/\n/).filter(Boolean).length;
@@ -32,11 +33,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `You are an English writing teacher for elementary students. 
-Given a short paragraph they wrote, respond in Korean with:
-1. 한 문단의 흐름이 자연스러운지 간단히 말해 주세요.
-2. 추가하면 좋을 내용이나 문장을 1~2가지 제안해 주세요.
-말투는 친근하고 짧게 (2~4문장).`,
+            content: getPrompt("writingAnalyze"),
           },
           {
             role: "user",

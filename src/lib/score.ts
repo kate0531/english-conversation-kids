@@ -1,6 +1,5 @@
 import type { Achievement } from "@/types/conversation";
 import type { QuestionItem } from "@/types/conversation";
-import { correctWithGPT, type CorrectionResult } from "./correction";
 
 export interface EvaluationResult {
   score: number;
@@ -10,7 +9,7 @@ export interface EvaluationResult {
 }
 
 /**
- * GPT API로 교정 후 채점 (API 키가 있으면), 없으면 기본 채점
+ * 서버 OpenAI LLM(/api/speaking/evaluate)으로 교정·채점, 실패 시 기본 채점
  */
 export async function evaluateAnswer(
   userAnswer: string,
@@ -19,22 +18,20 @@ export async function evaluateAnswer(
   const raw = userAnswer.trim().toLowerCase();
   if (!raw) return { score: 0, achievement: "low" };
 
-  // GPT API로 교정 시도
-  const gptResult = await correctWithGPT(userAnswer, question);
-
-  if (gptResult) {
-    // GPT 결과 사용
-    const score = gptResult.score;
-    let achievement: Achievement = "low";
-    if (score >= 70) achievement = "high";
-    else if (score >= 40) achievement = "mid";
-
-    return {
-      score,
-      achievement,
-      corrected: gptResult.corrected,
-      feedback: gptResult.feedback,
-    };
+  try {
+    const res = await fetch("/api/speaking/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userAnswer, question }),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as EvaluationResult;
+      if (typeof data.score === "number" && data.achievement) {
+        return data;
+      }
+    }
+  } catch {
+    /* fallback below */
   }
 
   // GPT API 없으면 기본 채점 (기존 로직)

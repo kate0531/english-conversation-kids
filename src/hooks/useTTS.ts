@@ -1,7 +1,18 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useRef, useEffect } from "react";
 import { playDing } from "@/lib/sounds";
+
+/** OpenAI TTS 재생 중인 Audio (stop 시 중단) */
+let currentTTSAudio: HTMLAudioElement | null = null;
+
+function stopOpenAITTS(): void {
+  if (currentTTSAudio) {
+    currentTTSAudio.pause();
+    currentTTSAudio.src = "";
+    currentTTSAudio = null;
+  }
+}
 
 export type TTSVoiceType = "female" | "male" | "childFemale";
 
@@ -122,30 +133,34 @@ const PAUSE_BETWEEN_LINES_MS = 380;
 const DING_BEFORE_NEXT_MS = 180;
 
 /** OpenAI TTS API로 한 문장 재생. API 사용 불가 시 { ok: false } 반환 */
-async function playTTSViaAPI(
-  text: string,
-  voice: "nova" | "echo"
-): Promise<{ ok: true } | { ok: false }> {
+async function playTTSViaAPI(text: string, voice: string): Promise<{ ok: true } | { ok: false }> {
+  stopOpenAITTS();
   const res = await fetch("/api/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: normalizeForEnglish(text), voice }),
+    body: JSON.stringify({ text, voice }),
   });
   if (!res.ok) return { ok: false };
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   return new Promise((resolve) => {
     const audio = new Audio(url);
+    currentTTSAudio = audio;
     audio.onended = () => {
       URL.revokeObjectURL(url);
+      if (currentTTSAudio === audio) currentTTSAudio = null;
       resolve({ ok: true });
     };
     audio.onerror = () => {
       URL.revokeObjectURL(url);
+      if (currentTTSAudio === audio) currentTTSAudio = null;
       resolve({ ok: true });
     };
     audio.volume = 0.98;
-    audio.play().catch(() => resolve({ ok: true }));
+    audio.play().catch(() => {
+      if (currentTTSAudio === audio) currentTTSAudio = null;
+      resolve({ ok: true });
+    });
   });
 }
 
@@ -176,7 +191,8 @@ export function playSampleConversationWithOpenAI(
     const doPlay = async () => {
       if (cancelled) return;
       const voice = line.speaker === "ai" ? "nova" : "echo";
-      const result = await playTTSViaAPI(text, voice);
+      const normalized = normalizeForEnglish(text);
+      const result = await playTTSViaAPI(normalized, voice);
       if (cancelled) return;
       if (!result.ok) {
         cancelled = true;
@@ -197,6 +213,8 @@ export function playSampleConversationWithOpenAI(
   playNext();
   return () => {
     cancelled = true;
+    stopOpenAITTS();
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
   };
 }
 
@@ -274,24 +292,54 @@ export function playSampleConversation(
   return () => window.speechSynthesis.cancel();
 }
 
+function pickOpenAIVoice(
+  gender: TTSVoiceType,
+  lang: TTSLang
+): string {
+  if (lang === "ko-KR") return "shimmer";
+  if (gender === "male") return "onyx";
+  if (gender === "childFemale") return "echo";
+  return "nova";
+}
+
 export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoicePerson; lang?: TTSLang }) {
   const gender = options?.gender ?? "female";
   const voicePerson = options?.voicePerson ?? 1;
   const lang = options?.lang ?? "en-US";
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const speak = useCallback(
     (text: string) => {
       if (typeof window === "undefined" || !text?.trim()) return;
-      const normalized = lang === "ko-KR" ? normalizeForKorean(text) : normalizeForEnglish(text);
+      const normalized =
+        lang === "ko-KR" ? normalizeForKorean(text) : normalizeForEnglish(text);
       if (!normalized) return;
       window.speechSynthesis?.cancel();
-      const mapped: "female" | "male" = gender === "childFemale" ? "female" : gender;
-      speakWithBrowser(normalized, mapped, voicePerson, lang);
+      stopOpenAITTS();
+
+      const voice = pickOpenAIVoice(gender, lang);
+
+      void (async () => {
+        const result = await playTTSViaAPI(normalized, voice);
+        if (!mountedRef.current) return;
+        if (!result.ok) {
+          const mapped: "female" | "male" = gender === "childFemale" ? "female" : gender;
+          speakWithBrowser(normalized, mapped, voicePerson, lang);
+        }
+      })();
     },
     [gender, voicePerson, lang]
   );
 
   const stop = useCallback(() => {
     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    stopOpenAITTS();
   }, []);
 
   return { speak, stop };

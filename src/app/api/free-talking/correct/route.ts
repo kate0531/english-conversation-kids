@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIApiKey } from "@/lib/openai";
+import { getPrompt } from "@/lib/prompts";
 import type { FreeTalkingScenario, CorrectionPoint } from "@/types/freeTalking";
 
 /** 대화 턴 + userAnswers로 전체 대화 문자열 생성 */
@@ -54,33 +55,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `You are an English teacher for elementary students (초등학생). 
-- 인명(예: Hailey)은 반드시 영어 그대로 써 주세요. 한글로 바꾸지 마세요.
-
-Given a short dialogue between a partner and the student (User), do two things:
-
-1. CORRECTIONS: For each line the User said, give ONE correction point. 반드시 "이번 대화에서 아이가 실제로 한 말"을 보고 판단하세요.
-   - koExplanation: 이 문장의 "실제 문제"를 한 줄로 설명하고, 어떻게 보완하면 좋은지까지 적어 주세요.
-     * 문법/철자 오류가 있으면: 어떤 부분이 틀렸는지 구체적으로 + 어떻게 고치면 되는지 (예: "동사 'like' 뒤에는 play → playing처럼 -ing를 붙여요.")
-     * 문장이 짧거나 불완전하면: 뭐가 부족한지 + 어떻게 보완할지 (예: "'There are five'만 하면 다섯이 뭔지 모르니까 'There are five people in my family.'처럼 '가족이 다섯 명이에요'까지 붙여 주세요.")
-     * 정답으로 인정하는 경우: "잘했어요!"로 시작한 뒤, 같은 뜻이지만 다른 표현 하나만 한 줄로 제안 (예: "잘했어요! 'I also like to play with my friends.'처럼 같은 뜻으로 말해볼 수도 있어요."). "문장을 그대로 말하면 좋겠어요" 같은 표현은 쓰지 마세요.
-   - enCorrected: 교정·보완된 문장 또는 (정답인 경우) 제안한 다른 표현 문장 하나. 대문자·마침표 포함.
-   - koExplanation은 한 줄로만. "첫 글자 대문자" 같은 일반 규칙만 쓰지 말고, 이 답변에 맞는 구체적인 설명과 보완 방법을 써 주세요.
-
-2. SUMMARY: "대화 내용 요약"이 아니라, 아이 발화에 대한 "문법·발화 코멘트"를 한글로 한 단락(3~5문장)으로 써 주세요. 다음을 포함하세요.
-   - 어떤 부분이 틀렸는지, 어떤 표현이 부족했는지 구체적으로 짚어 주기.
-   - 다음에 말할 때 어떤 점에 주의하면 좋을지 (예: 문장 끝까지 말하기, like 뒤 -ing 등). 단, 구두점(마침표·쉼표·대문자 등) 관련 코멘트는 하지 마세요.
-   - 다음에 써 보면 좋은 문장·표현을 1~2개 제안 (영어 예시 포함).
-   인명(Hailey 등)은 영어로 유지. 친근한 말투로.
-
-Respond with ONLY a valid JSON object in this exact shape (no markdown, no extra text):
-{
-  "corrections": [
-    { "koExplanation": "한 줄 설명 (실제 틀린/부족한 부분 + 보완 방법)", "enCorrected": "최종 제안 문장" }
-  ],
-  "summary": "문법·발화 코멘트 (틀린 부분, 주의할 점, 써 볼 문장 제안)"
-}
-The number of items in "corrections" must match the number of User lines in the dialogue.`,
+            content: getPrompt("freeTalkingCorrect"),
           },
           {
             role: "user",

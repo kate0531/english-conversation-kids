@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIApiKey } from "@/lib/openai";
+import { getPrompt } from "@/lib/prompts";
 
 function sampleGrammarCheck(sentence: string): { corrected: string; feedback: string } {
   const s = sentence.trim();
@@ -58,10 +59,7 @@ export async function POST(req: NextRequest) {
         messages: [
           {
             role: "system",
-            content: `You are an English grammar checker for elementary students. 
-Given a sentence, return ONLY a JSON object with:
-1. "corrected": the grammatically correct version of the sentence (same meaning).
-2. "feedback": very brief explanation in Korean (one short sentence) of what was wrong, if anything. If the sentence is already correct, say "문법이 맞아요."`,
+            content: getPrompt("writingGrammar"),
           },
           {
             role: "user",
