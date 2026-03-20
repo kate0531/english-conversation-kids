@@ -57,7 +57,7 @@ export default function ConversationPage() {
     feedback?: string;
   } | null>(null);
 
-  const { isListening, toggle, supported } = useSpeechRecognition({
+  const { isListening, toggle, supported, sttError, clearSttError } = useSpeechRecognition({
     lang: "en-US",
     onResult: (text) => {
       setInput((prev) => (prev ? `${prev} ${text}` : text));
@@ -71,6 +71,16 @@ export default function ConversationPage() {
     playClick();
     setIsSubmitting(true);
     const result = await evaluateAnswer(trimmed, currentQuestion);
+    if (result.evaluationUnavailable) {
+      setToast({
+        achievement: "low",
+        score: 0,
+        reaction: "연결 오류",
+        feedback: result.feedback,
+      });
+      setIsSubmitting(false);
+      return;
+    }
     const { score, achievement, corrected, feedback } = result;
     const reaction = currentQuestion.reactions[achievement];
     const next = getNextQuestion(currentQuestion.id, achievement);
@@ -401,6 +411,14 @@ export default function ConversationPage() {
           </main>
           {isWaitingAnswer && (
             <div className="fixed bottom-0 left-0 right-0 z-20 bg-sky-50/95 backdrop-blur border-t border-sky-200 px-4 py-3 max-w-xl mx-auto">
+              {sttError ? (
+                <p className="text-amber-900 text-xs mb-2 bg-amber-100 border border-amber-300 rounded-lg px-2 py-1.5">
+                  {sttError}
+                  <button type="button" className="ml-2 underline" onClick={() => clearSttError()}>
+                    닫기
+                  </button>
+                </p>
+              ) : null}
               <div className="flex gap-2 items-center">
                 <input
                   type="text"
@@ -446,6 +464,14 @@ export default function ConversationPage() {
           </main>
           {isWaitingAnswer && (
             <div className="fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur border-t border-pink-100 px-4 py-3 max-w-xl mx-auto">
+              {sttError ? (
+                <p className="text-amber-900 text-xs mb-2 bg-amber-100 border border-amber-300 rounded-lg px-2 py-1.5">
+                  {sttError}
+                  <button type="button" className="ml-2 underline" onClick={() => clearSttError()}>
+                    닫기
+                  </button>
+                </p>
+              ) : null}
               <div className="flex gap-2 items-center">
                 <input
                   type="text"

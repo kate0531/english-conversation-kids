@@ -2,35 +2,6 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 
-interface SpeechRecognitionResult {
-  isFinal: boolean;
-  0: { transcript: string };
-}
-
-interface SpeechRecognitionEvent {
-  results: SpeechRecognitionResult[];
-  resultIndex: number;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition?: new () => SpeechRecognitionInstance;
-  }
-}
-
-interface SpeechRecognitionInstance {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  start(): void;
-  stop(): void;
-  abort(): void;
-  onresult: ((e: SpeechRecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-}
-
 function pickRecorderMime(): string {
   const c = [
     "audio/webm;codecs=opus",
@@ -49,7 +20,6 @@ function langToWhisperCode(lang: string): string {
   return "en";
 }
 
-/** Blob MIME과 맞는 파일명 (webm인데 mp4로 녹음하면 Whisper/OpenAI가 거부할 수 있음) */
 function audioFilenameForBlob(blob: Blob): string {
   const m = (blob.type || "").toLowerCase();
   if (m.includes("mp4") || m.includes("m4a") || m.includes("aac") || m.includes("caf"))
@@ -60,26 +30,23 @@ function audioFilenameForBlob(blob: Blob): string {
   return "audio.webm";
 }
 
-/**
- * Vercel Hobby: 서버 함수 처리 한도가 짧아 긴 녹음+Whisper가 타임아웃(504) 나기 쉬움.
- * 로컬(Cursor)은 한도가 널널해 같은 코드가 되는 경우만 있음.
- */
 const MAX_RECORDING_MS = 9000;
 
 /**
- * 음성 인식: OpenAI Whisper(/api/stt) 우선(마이크 녹음), 실패 시 브라우저 Web Speech API
+ * 음성 인식: OpenAI Whisper(/api/stt)만 사용. API 실패·짧은 녹음 시 Web Speech 등 폴백 없음.
  */
-export function useSpeechRecognition(options?: { lang?: string; onResult?: (text: string) => void }) {
+export function useSpeechRecognition(options?: {
+  lang?: string;
+  onResult?: (text: string) => void;
+}) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const [sttError, setSttError] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const onResultCb = useRef(options?.onResult);
-  const lastTranscriptRef = useRef<string>("");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const usingWebRef = useRef(false);
   onResultCb.current = options?.onResult;
 
   const stopStream = useCallback(() => {
@@ -91,7 +58,10 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
 
   const transcribeBlob = useCallback(
     async (blob: Blob): Promise<boolean> => {
-      if (blob.size < 80) return true;
+      if (blob.size < 80) {
+        setSttError("녹음이 너무 짧거나 비어 있어요. 조금 더 길게 말한 뒤 다시 눌러 주세요.");
+        return false;
+      }
       const fd = new FormData();
       fd.append("file", blob, audioFilenameForBlob(blob));
       fd.append("language", langToWhisperCode(options?.lang ?? "en-US"));
@@ -110,18 +80,24 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
             /* ignore */
           }
           console.warn("[STT] /api/stt 실패:", res.status, detail);
+          setSttError(
+            `음성 인식 서버를 쓸 수 없어요. (${res.status}) Vercel에 OPENAI_API_KEY가 있는지 확인해 주세요.`
+          );
           return false;
         }
         const data = (await res.json()) as { text?: string };
         const text = typeof data.text === "string" ? data.text.trim() : "";
         if (!text) {
           console.warn("[STT] Whisper 빈 텍스트, blob 크기:", blob.size);
+          setSttError("음성을 텍스트로 바꾸지 못했어요. 마이크·말하기 언어를 확인해 주세요.");
           return false;
         }
+        setSttError(null);
         onResultCb.current?.(text);
         return true;
       } catch (e) {
         console.warn("[STT] 네트워크/요청 오류:", e);
+        setSttError("음성 인식 요청에 실패했어요. 인터넷 연결을 확인해 주세요.");
         return false;
       }
     },
@@ -141,38 +117,14 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
           stopStream();
           setIsListening(false);
         }
-      } else if (usingWebRef.current && recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (_) {
-          /* ignore */
-        }
-        setIsListening(false);
       }
     }, MAX_RECORDING_MS);
   }, [stopStream]);
 
-  const startWebSpeech = useCallback(() => {
-    const SpeechRecognitionClass =
-      typeof window !== "undefined"
-        ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
-        : undefined;
-    if (!SpeechRecognitionClass || !recognitionRef.current) return;
-    usingWebRef.current = true;
-    lastTranscriptRef.current = "";
-    try {
-      recognitionRef.current.start();
-      setIsListening(true);
-      armTimeout();
-    } catch {
-      setIsListening(false);
-    }
-  }, [armTimeout]);
-
   const startMediaRecorder = useCallback(async (): Promise<void> => {
-    usingWebRef.current = false;
+    setSttError(null);
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-      startWebSpeech();
+      setSttError("이 브라우저에서는 마이크 녹음(음성 인식 API)을 쓸 수 없어요. Chrome을 사용해 주세요.");
       return;
     }
     try {
@@ -189,89 +141,32 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
-        /** stopStream()이 chunksRef를 비우므로, 먼저 녹음 조각을 복사 */
         const chunkParts = chunksRef.current.slice();
         chunksRef.current = [];
         stopStream();
         setIsListening(false);
         const blob = new Blob(chunkParts, { type: mime });
-        if (blob.size < 80) {
-          startWebSpeech();
-          return;
-        }
-        const ok = await transcribeBlob(blob);
-        if (!ok) startWebSpeech();
+        await transcribeBlob(blob);
       };
-      /** timeslice: 일부 환경에서 stop 시점에 ondataavailable이 비는 것 방지 */
       rec.start(250);
       recorderRef.current = rec;
       setIsListening(true);
     } catch {
-      startWebSpeech();
+      setSttError("마이크 권한이 없거나 사용할 수 없어요. 브라우저 설정에서 마이크를 허용해 주세요.");
     }
-  }, [startWebSpeech, stopStream, transcribeBlob]);
+  }, [stopStream, transcribeBlob]);
 
   useEffect(() => {
-    const SpeechRecognitionClass =
-      typeof window !== "undefined"
-        ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
-        : undefined;
-    const canWeb = !!SpeechRecognitionClass;
-    const canMedia = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
-    setSupported(canWeb || canMedia);
-
-    if (SpeechRecognitionClass) {
-      const recognition = new SpeechRecognitionClass();
-      recognition.lang = options?.lang ?? "en-US";
-      recognition.continuous = false;
-      recognition.interimResults = true;
-
-      recognition.onresult = (e: SpeechRecognitionEvent) => {
-        if (e.results.length === 0) return;
-        const result = e.results[e.results.length - 1];
-        const transcript =
-          result[0] && result[0].transcript ? String(result[0].transcript).trim() : "";
-        if (!transcript) return;
-        lastTranscriptRef.current = transcript;
-        if (result.isFinal) {
-          onResultCb.current?.(transcript);
-          lastTranscriptRef.current = "";
-        }
-      };
-      recognition.onend = () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        if (usingWebRef.current && lastTranscriptRef.current) {
-          onResultCb.current?.(lastTranscriptRef.current);
-          lastTranscriptRef.current = "";
-        }
-        usingWebRef.current = false;
-        setIsListening(false);
-      };
-      recognition.onerror = () => {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        setIsListening(false);
-      };
-      recognitionRef.current = recognition;
-    }
+    const canMedia =
+      typeof navigator !== "undefined" &&
+      !!navigator.mediaDevices?.getUserMedia &&
+      typeof MediaRecorder !== "undefined";
+    setSupported(canMedia);
 
     return () => {
       stopStream();
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch (_) {
-          /* ignore */
-        }
-        recognitionRef.current = null;
-      }
     };
-  }, [options?.lang, stopStream]);
+  }, [stopStream]);
 
   const stop = useCallback(() => {
     if (timeoutRef.current) {
@@ -293,13 +188,8 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
       }
       return;
     }
-    if (recognitionRef.current && isListening) {
-      try {
-        recognitionRef.current.stop();
-      } catch (_) {}
-    }
     setIsListening(false);
-  }, [isListening, stopStream]);
+  }, [stopStream]);
 
   const start = useCallback(() => {
     if (isListening) return;
@@ -317,5 +207,7 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
     else start();
   }, [isListening, start, stop]);
 
-  return { isListening, start, stop, toggle, supported };
+  const clearSttError = useCallback(() => setSttError(null), []);
+
+  return { isListening, start, stop, toggle, supported, sttError, clearSttError };
 }

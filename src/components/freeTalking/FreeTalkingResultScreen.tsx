@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { FreeTalkingScenario } from "@/types/freeTalking";
 import type { CorrectionPoint } from "@/types/freeTalking";
-import { MOCK_CORRECTIONS, MOCK_SUMMARY } from "@/data/freeTalkingCorrections";
 import { useTTS } from "@/hooks/useTTS";
 import { playClick } from "@/lib/sounds";
 
@@ -15,6 +14,9 @@ interface FreeTalkingResultScreenProps {
   onCorrectionsLoaded?: (correctedSentences: string[]) => void;
 }
 
+const API_FAIL =
+  "교정 API를 불러오지 못했어요. Vercel에 OPENAI_API_KEY가 설정되어 있는지, 재배포했는지 확인해 주세요. (목업·임시 문장은 보여 주지 않습니다)";
+
 export default function FreeTalkingResultScreen({
   scenario,
   userAnswers,
@@ -22,42 +24,63 @@ export default function FreeTalkingResultScreen({
   onBack,
   onCorrectionsLoaded,
 }: FreeTalkingResultScreenProps) {
+  const onLoadedRef = useRef(onCorrectionsLoaded);
+  onLoadedRef.current = onCorrectionsLoaded;
+
   const [playingIndex, setPlayingIndex] = useState<number | null>(null);
   const [showContent, setShowContent] = useState(false);
-  const [corrections, setCorrections] = useState<CorrectionPoint[]>(MOCK_CORRECTIONS);
-  const [summary, setSummary] = useState<string>(MOCK_SUMMARY);
+  const [corrections, setCorrections] = useState<CorrectionPoint[]>([]);
+  const [summary, setSummary] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const { speak } = useTTS({ gender: "female" });
 
   useEffect(() => {
     if (!userAnswers.length) {
       setLoading(false);
+      setApiError(null);
+      setCorrections([]);
+      setSummary("");
       return;
     }
     let cancelled = false;
+    setApiError(null);
+    setLoading(true);
     fetch("/api/free-talking/correct", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ scenario, userAnswers }),
     })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(res.statusText))))
-      .then((data: { corrections?: CorrectionPoint[]; summary?: string }) => {
+      .then(async (res) => {
         if (cancelled) return;
-        const nextCorrections = Array.isArray(data.corrections) && data.corrections.length > 0
-          ? data.corrections
-          : MOCK_CORRECTIONS;
-        setCorrections(nextCorrections);
-        onCorrectionsLoaded?.(nextCorrections.map((c) => c.enCorrected));
+        if (!res.ok) {
+          setApiError(API_FAIL);
+          setCorrections([]);
+          setSummary("");
+          return;
+        }
+        const data = (await res.json()) as { corrections?: CorrectionPoint[]; summary?: string };
+        const list = Array.isArray(data.corrections) ? data.corrections : [];
+        if (list.length === 0) {
+          setApiError(API_FAIL);
+          setCorrections([]);
+          setSummary("");
+          return;
+        }
+        setCorrections(list);
+        onLoadedRef.current?.(list.map((c) => c.enCorrected));
         if (typeof data.summary === "string" && data.summary.trim()) {
           setSummary(data.summary.trim());
+        } else {
+          setSummary("");
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setCorrections(MOCK_CORRECTIONS);
-          setSummary(MOCK_SUMMARY);
-          onCorrectionsLoaded?.(MOCK_CORRECTIONS.map((c) => c.enCorrected));
+          setApiError(API_FAIL);
+          setCorrections([]);
+          setSummary("");
         }
       })
       .finally(() => {
@@ -67,10 +90,6 @@ export default function FreeTalkingResultScreen({
       cancelled = true;
     };
   }, [scenario, userAnswers]);
-
-  useEffect(() => {
-    onCorrectionsLoaded?.(corrections.map((c) => c.enCorrected));
-  }, [corrections, onCorrectionsLoaded]);
 
   const playGuide = useCallback(() => {
     const audio = audioRef.current;
@@ -114,9 +133,11 @@ export default function FreeTalkingResultScreen({
   const handlePlayCorrection = (index: number) => {
     playClick();
     setPlayingIndex(index);
-    speak(corrections[index].enCorrected);
+    speak(corrections[index]?.enCorrected ?? "");
     setTimeout(() => setPlayingIndex(null), 2000);
   };
+
+  const canProceed = !loading && !apiError && corrections.length > 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-rose-50 via-pink-50/80 to-amber-50/70 overflow-y-auto">
@@ -152,11 +173,18 @@ export default function FreeTalkingResultScreen({
           showContent ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        {/* 교정 포인트 */}
+        {apiError && (
+          <section className="rounded-xl border-2 border-red-200 bg-red-50 p-4 shadow-md">
+            <h2 className="text-sm font-bold text-red-700 mb-2">교정을 불러오지 못했어요</h2>
+            <p className="text-red-800 text-sm leading-relaxed">{apiError}</p>
+          </section>
+        )}
+
         <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
           <h2 className="text-sm font-bold text-pink-600 mb-3">교정 포인트</h2>
-          {loading && (
-            <p className="text-gray-500 text-sm mb-3">교정 내용을 불러오는 중이에요...</p>
+          {loading && <p className="text-gray-500 text-sm mb-3">교정 내용을 불러오는 중이에요...</p>}
+          {!loading && !apiError && corrections.length === 0 && userAnswers.length > 0 && (
+            <p className="text-gray-500 text-sm">표시할 교정이 없어요.</p>
           )}
           <div className="space-y-3">
             {corrections.map((c, i) => (
@@ -164,9 +192,7 @@ export default function FreeTalkingResultScreen({
                 key={i}
                 className="rounded-lg border border-pink-100 bg-pink-50/50 p-3 flex flex-col gap-2"
               >
-                <p className="text-gray-700 text-sm leading-relaxed break-words">
-                  {c.koExplanation}
-                </p>
+                <p className="text-gray-700 text-sm leading-relaxed break-words">{c.koExplanation}</p>
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-green-700 font-medium text-sm break-words flex-1 min-w-0">
                     {c.enCorrected}
@@ -179,9 +205,7 @@ export default function FreeTalkingResultScreen({
                     >
                       {playingIndex === i ? "▶" : "🔊"}
                     </button>
-                    <span className="text-xs text-pink-600/80">
-                      들어보고 따라 말해보기
-                    </span>
+                    <span className="text-xs text-pink-600/80">들어보고 따라 말해보기</span>
                   </div>
                 </div>
               </div>
@@ -189,11 +213,12 @@ export default function FreeTalkingResultScreen({
           </div>
         </section>
 
-        {/* 문법·발화 코멘트 */}
-        <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
-          <h2 className="text-sm font-bold text-pink-600 mb-2">문법·발화 코멘트</h2>
-          <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{summary}</p>
-        </section>
+        {summary ? (
+          <section className="rounded-xl border-2 border-pink-200 bg-white p-4 shadow-md">
+            <h2 className="text-sm font-bold text-pink-600 mb-2">문법·발화 코멘트</h2>
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line">{summary}</p>
+          </section>
+        ) : null}
 
         <button
           type="button"
@@ -201,7 +226,8 @@ export default function FreeTalkingResultScreen({
             playClick();
             onNext();
           }}
-          className="w-full rounded-xl py-3 font-medium text-white bg-gradient-to-r from-pink-500 to-rose-400 hover:from-pink-600 hover:to-rose-500 shadow-md transition mt-2"
+          disabled={!canProceed}
+          className="w-full rounded-xl py-3 font-medium text-white bg-gradient-to-r from-pink-500 to-rose-400 hover:from-pink-600 hover:to-rose-500 shadow-md transition mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           다음
         </button>

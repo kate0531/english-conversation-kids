@@ -6,10 +6,15 @@ export interface EvaluationResult {
   achievement: Achievement;
   corrected?: string;
   feedback?: string;
+  /** true면 채점 API 미동작 — 진행·분기 없음 */
+  evaluationUnavailable?: boolean;
 }
 
+const API_FAIL_FEEDBACK =
+  "채점 서버에 연결할 수 없어요. Vercel 환경 변수 OPENAI_API_KEY와 재배포를 확인해 주세요.";
+
 /**
- * 서버 OpenAI LLM(/api/speaking/evaluate)으로 교정·채점, 실패 시 기본 채점
+ * 서버 OpenAI LLM(/api/speaking/evaluate)으로만 교정·채점. API 실패 시 로컬 키워드 채점 없음.
  */
 export async function evaluateAnswer(
   userAnswer: string,
@@ -31,26 +36,13 @@ export async function evaluateAnswer(
       }
     }
   } catch {
-    /* fallback below */
+    /* strict: no fallback */
   }
 
-  // GPT API 없으면 기본 채점 (기존 로직)
-  let score = 0;
-  const keywords = question.expectedKeywords ?? [];
-  const matched = keywords.filter((k) => raw.includes(k.toLowerCase()));
-  score += Math.min(matched.length * 25, 60);
-
-  const wordCount = raw.split(/\s+/).length;
-  if (wordCount >= 2 && wordCount <= 15) score += 20;
-  else if (wordCount >= 1) score += 10;
-
-  if (raw.length >= 5) score += 10;
-
-  const final = Math.min(100, Math.max(0, score));
-
-  let achievement: Achievement = "low";
-  if (final >= 70) achievement = "high";
-  else if (final >= 40) achievement = "mid";
-
-  return { score: final, achievement };
+  return {
+    score: 0,
+    achievement: "low",
+    feedback: API_FAIL_FEEDBACK,
+    evaluationUnavailable: true,
+  };
 }

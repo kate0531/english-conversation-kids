@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { SubtitleMode } from "@/types/freeTalking";
 import type { FreeTalkingScenario, FreeTalkingConversationTurn } from "@/types/freeTalking";
 import { getBackgroundImageUrl, PARTNER_IMAGE_FEMALE } from "@/data/freeTalkingData";
@@ -49,19 +49,15 @@ export default function FreeTalkingMainScreen({
   const [hintVisible, setHintVisible] = useState(false);
 
   const partnerImageUrl = scenario.partner?.imageUrl ?? PARTNER_IMAGE_FEMALE;
-  const { speak } = useTTS({ gender: "female" }); // OpenAI TTS nova 우선 (질문 음원)
+  const { speak, speakAndWait } = useTTS({ gender: "female" });
   const bgUrl = getBackgroundImageUrl(scenario.visualKeywords);
 
   const conversation = scenario?.conversation ?? [];
   const currentTurn = conversation[currentTurnIndex];
-
-  /** 질문 길이에 맞춰 Hailey 음성 들을 시간 (OpenAI TTS 대비) */
-  const aiListenDelayMs = useMemo(() => {
-    const t = currentTurn?.speaker === "ai" ? (currentTurn.text ?? "") : "";
-    const base = 2600;
-    const perChar = 52;
-    return Math.min(11000, base + t.length * perChar);
-  }, [currentTurn?.speaker, currentTurn?.text]);
+  const [ttsError, setTtsError] = useState<string | null>(null);
+  const [ttsRetryToken, setTtsRetryToken] = useState(0);
+  /** 이펙트가 빠르게 재실행될 때 이전 TTS 완료 콜백 무시 (Strict Mode·재시도) */
+  const ttsRunIdRef = useRef(0);
 
   const isUserTurn = currentTurn?.speaker === "user";
   const isDone = currentTurnIndex >= conversation.length;
@@ -96,26 +92,39 @@ export default function FreeTalkingMainScreen({
     return () => clearTimeout(t);
   }, [isUserTurn, currentTurn?.keywords, currentTurnIndex]);
 
-  const { isListening, toggle } = useSpeechRecognition({
+  const { isListening, toggle, sttError, clearSttError } = useSpeechRecognition({
     lang: "en-US",
     onResult: handleVoiceResult,
   });
 
-  // AI 턴: 카운트다운 끝난 뒤 질문 음원(TTS) 재생 → 띵동 → 다음 턴(유저)으로 전환
+  // AI 턴: TTS API 재생이 끝난 뒤에만 띵동·다음 턴 (실패 시 진행 안 함 — 내장 음성 폴백 없음)
   useEffect(() => {
     if (showCountdown || !currentTurn || currentTurn.speaker !== "ai" || isDone) return;
-    speak(currentTurn.text ?? "");
-    const isLastTurn = currentTurnIndex === conversation.length - 1;
-    const delay = aiListenDelayMs;
-    const t = setTimeout(() => {
-      playDing(); // 음원 끝난 다음에 띵동
+    let cancelled = false;
+    const runId = ++ttsRunIdRef.current;
+    setTtsError(null);
+
+    void (async () => {
+      const ok = await speakAndWait(currentTurn.text ?? "");
+      if (cancelled || runId !== ttsRunIdRef.current) return;
+      if (!ok) {
+        setTtsError(
+          "질문 음성(TTS)을 재생할 수 없어요. Vercel의 OPENAI_API_KEY·재배포를 확인한 뒤 아래에서 다시 시도해 주세요."
+        );
+        return;
+      }
+      playDing();
+      const isLastTurn = currentTurnIndex === conversation.length - 1;
       if (isLastTurn) {
         onAllComplete();
       } else {
         setCurrentTurnIndex((i) => i + 1);
       }
-    }, delay);
-    return () => clearTimeout(t);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     showCountdown,
     currentTurnIndex,
@@ -123,9 +132,9 @@ export default function FreeTalkingMainScreen({
     currentTurn?.text,
     conversation.length,
     isDone,
-    speak,
+    speakAndWait,
     onAllComplete,
-    aiListenDelayMs,
+    ttsRetryToken,
   ]);
 
   const handleReplayHaileyQuestion = useCallback(() => {
@@ -134,6 +143,11 @@ export default function FreeTalkingMainScreen({
     playClick();
     speak(texts.en);
   }, [conversation, currentTurnIndex, speak]);
+
+  const handleTtsRetry = useCallback(() => {
+    playClick();
+    setTtsRetryToken((t) => t + 1);
+  }, []);
 
   if (isDone || !currentTurn) return null;
 
@@ -159,6 +173,30 @@ export default function FreeTalkingMainScreen({
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-6 overflow-y-auto">
+        {ttsError ? (
+          <div className="w-full max-w-[300px] mb-3 rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+            <p className="font-medium mb-2">{ttsError}</p>
+            <button
+              type="button"
+              onClick={handleTtsRetry}
+              className="w-full rounded-lg bg-red-600 text-white py-2 font-medium hover:bg-red-700"
+            >
+              TTS 다시 시도
+            </button>
+          </div>
+        ) : null}
+        {sttError ? (
+          <div className="w-full max-w-[300px] mb-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {sttError}
+            <button
+              type="button"
+              onClick={() => clearSttError()}
+              className="block mt-2 text-amber-700 underline"
+            >
+              메시지 닫기
+            </button>
+          </div>
+        ) : null}
         {/* 프로필 카드: 세로로 세운 좁은 컬럼 */}
         <div className="w-full max-w-[300px] flex flex-col items-center mb-2">
           <CharacterPortrait

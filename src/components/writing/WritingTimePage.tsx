@@ -10,6 +10,9 @@ import { saveRecentProPractice } from "@/lib/recentLearningHistory";
 
 const NOTE_LINE_HEIGHT = "3rem"; /* 영어 2줄 기준 회색선 높이 */
 
+const WRITING_API_FAIL =
+  "문법·분석 API를 사용할 수 없어요. OPENAI_API_KEY(Vercel 환경 변수)와 재배포를 확인해 주세요.";
+
 interface WritingTimePageProps {
   onBackToGate: () => void;
 }
@@ -30,6 +33,7 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
   const [fullAnalysis, setFullAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showLoadingBulb, setShowLoadingBulb] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastSpokenPromptRef = useRef("");
   const { speak: speakFemale } = useTTS({ gender: "female" });
@@ -76,6 +80,7 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
     setLines([]);
     setCurrentLine("");
     setFullAnalysis(null);
+    setApiError(null);
   }, []);
 
   const handleKeyDown = useCallback(
@@ -86,12 +91,18 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
       if (!line) return;
 
       setIsChecking(true);
+      setApiError(null);
       try {
         const res = await fetch("/api/writing/grammar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sentence: line }),
         });
+        if (!res.ok) {
+          setApiError(WRITING_API_FAIL);
+          setIsChecking(false);
+          return;
+        }
         const data = await res.json();
         const corrected = data.corrected ?? line;
         const feedback = data.feedback ?? "";
@@ -103,8 +114,7 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
         ]);
         setCurrentLine("");
       } catch (_) {
-        setLines((prev) => [...prev, { text: line, corrected: undefined, feedback: undefined, hasError: false }]);
-        setCurrentLine("");
+        setApiError(WRITING_API_FAIL);
       }
       setIsChecking(false);
     },
@@ -118,12 +128,20 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
 
     if (line) {
       setIsChecking(true);
+      setApiError(null);
       try {
         const res = await fetch("/api/writing/grammar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ sentence: line }),
         });
+        if (!res.ok) {
+          setApiError(WRITING_API_FAIL);
+          setIsChecking(false);
+          setShowLoadingBulb(false);
+          setIsAnalyzing(false);
+          return;
+        }
         const data = await res.json();
         const corrected = data.corrected ?? line;
         const feedback = data.feedback ?? "";
@@ -133,8 +151,11 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
         ]);
         setCurrentLine("");
       } catch (_) {
-        setLines((prev) => [...prev, { text: line, corrected: undefined, feedback: undefined, hasError: false }]);
-        setCurrentLine("");
+        setApiError(WRITING_API_FAIL);
+        setIsChecking(false);
+        setShowLoadingBulb(false);
+        setIsAnalyzing(false);
+        return;
       }
       setIsChecking(false);
     }
@@ -144,16 +165,28 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
 
     setShowLoadingBulb(true);
     setIsAnalyzing(true);
+    setApiError(null);
     try {
       const res = await fetch("/api/writing/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paragraph: paragraphToAnalyze }),
       });
-      const data = await res.json();
-      setFullAnalysis(data.analysis ?? "분석 결과가 없어요.");
+      if (!res.ok) {
+        setFullAnalysis(null);
+        setApiError(WRITING_API_FAIL);
+      } else {
+        const data = await res.json();
+        if (typeof data.analysis === "string" && data.analysis.trim()) {
+          setFullAnalysis(data.analysis.trim());
+        } else {
+          setFullAnalysis(null);
+          setApiError(WRITING_API_FAIL);
+        }
+      }
     } catch (_) {
-      setFullAnalysis("분석을 불러오지 못했어요.");
+      setFullAnalysis(null);
+      setApiError(WRITING_API_FAIL);
     }
     setIsAnalyzing(false);
   }, [currentLine, lines]);
@@ -165,6 +198,7 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
     setCurrentLine("");
     setFullAnalysis(null);
     setShowLoadingBulb(false);
+    setApiError(null);
   }, []);
 
   const fullParagraph = [...lines.map((l) => l.text), currentLine].filter(Boolean).join("\n");
@@ -261,6 +295,11 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
             </div>
 
             <div className="flex flex-col gap-4">
+              {apiError ? (
+                <p className="text-red-700 text-sm font-medium bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                  {apiError}
+                </p>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {

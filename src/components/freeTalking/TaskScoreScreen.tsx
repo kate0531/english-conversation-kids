@@ -35,7 +35,7 @@ export default function TaskScoreScreen({
     setPracticeSpoken(true);
   }, []);
 
-  const { isListening, toggle } = useSpeechRecognition({
+  const { isListening, toggle, sttError, clearSttError } = useSpeechRecognition({
     lang: "en-US",
     onResult: handleVoiceResult,
   });
@@ -118,6 +118,14 @@ export default function TaskScoreScreen({
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl flex flex-col items-center gap-6">
             <h3 className="text-lg font-semibold text-gray-800">따라해보세요</h3>
             <p className="text-center text-base text-gray-700">{practicingTask.sentence}</p>
+            {sttError ? (
+              <p className="text-xs text-red-700 text-center bg-red-50 border border-red-200 rounded-lg px-2 py-2">
+                {sttError}
+                <button type="button" className="block mx-auto mt-1 underline" onClick={() => clearSttError()}>
+                  닫기
+                </button>
+              </p>
+            ) : null}
             <button
               type="button"
               onClick={toggle}

@@ -154,20 +154,24 @@ async function playTTSViaAPI(text: string, voice: string): Promise<{ ok: true } 
     audio.onerror = () => {
       URL.revokeObjectURL(url);
       if (currentTTSAudio === audio) currentTTSAudio = null;
-      resolve({ ok: true });
+      resolve({ ok: false });
     };
     audio.volume = 0.98;
     audio.play().catch(() => {
       if (currentTTSAudio === audio) currentTTSAudio = null;
-      resolve({ ok: true });
+      resolve({ ok: false });
     });
   });
 }
 
-/** Say It Like a Pro 전용: OpenAI TTS로 대화 재생 (nova=활기차고 감정 있는 여성, echo=대화형 남성/아이). API 불가 시 내장 TTS로 대체 */
+/**
+ * Say It Like a Pro 전용: OpenAI TTS만 사용.
+ * API 실패 시 내장 TTS로 넘어가지 않음 — onApiFailed 호출 후 onEnd.
+ */
 export function playSampleConversationWithOpenAI(
   lines: SampleLine[],
-  onEnd?: () => void
+  onEnd?: () => void,
+  onApiFailed?: () => void
 ): () => void {
   let cancelled = false;
   let index = 0;
@@ -196,7 +200,8 @@ export function playSampleConversationWithOpenAI(
       if (cancelled) return;
       if (!result.ok) {
         cancelled = true;
-        playSampleConversation(lines, onEnd);
+        onApiFailed?.();
+        onEnd?.();
         return;
       }
       setTimeout(playNext, PAUSE_BETWEEN_LINES_MS);
@@ -329,12 +334,33 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
         const result = await playTTSViaAPI(normalized, voice);
         if (!mountedRef.current) return;
         if (!result.ok) {
-          const mapped: "female" | "male" = gender === "childFemale" ? "female" : gender;
-          speakWithBrowser(normalized, mapped, voicePerson, lang);
+          console.warn("[TTS] /api/tts 실패 — 브라우저 내장 음성으로 대체하지 않습니다.");
         }
       })();
     },
     [gender, voicePerson, lang]
+  );
+
+  /**
+   * API TTS 재생이 끝날 때까지 대기. 실패 시 false.
+   * 주의: 재생 완료 후 mounted 여부와 관계없이 result.ok를 반환해야 함(Strict Mode 이중 마운트 시 오동작 방지).
+   */
+  const speakAndWait = useCallback(
+    async (text: string): Promise<boolean> => {
+      if (typeof window === "undefined" || !text?.trim()) return false;
+      const normalized =
+        lang === "ko-KR" ? normalizeForKorean(text) : normalizeForEnglish(text);
+      if (!normalized) return false;
+      window.speechSynthesis?.cancel();
+      stopOpenAITTS();
+      const voice = pickOpenAIVoice(gender, lang);
+      const result = await playTTSViaAPI(normalized, voice);
+      if (!result.ok) {
+        console.warn("[TTS] /api/tts 실패 — 브라우저 내장 음성으로 대체하지 않습니다.");
+      }
+      return result.ok;
+    },
+    [gender, lang]
   );
 
   const stop = useCallback(() => {
@@ -342,5 +368,5 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
     stopOpenAITTS();
   }, []);
 
-  return { speak, stop };
+  return { speak, speakAndWait, stop };
 }

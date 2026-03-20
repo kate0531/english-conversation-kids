@@ -62,7 +62,7 @@ export default function FreeTalkingSampleFollowScreen({
     [targetSentence]
   );
 
-  const { isListening, toggle, supported } = useSpeechRecognition({
+  const { isListening, toggle, supported, sttError, clearSttError } = useSpeechRecognition({
     lang: "en-US",
     onResult: handleVoiceResult,
   });
@@ -142,9 +142,16 @@ export default function FreeTalkingSampleFollowScreen({
                 </p>
               );
             })()
+          ) : sttError ? (
+            <p className="text-sm text-red-700 text-center">
+              {sttError}
+              <button type="button" className="block mx-auto mt-2 text-xs underline" onClick={() => clearSttError()}>
+                닫기
+              </button>
+            </p>
           ) : !supported ? (
             <p className="text-sm text-amber-700 text-center">
-              이 브라우저는 음성 인식을 지원하지 않습니다. Chrome(크롬)에서 시도해 주세요.
+              마이크 녹음을 사용할 수 없어요. Chrome에서 시도하거나 /api/stt(Whisper) 설정을 확인해 주세요.
             </p>
           ) : (
             <p className="text-sm text-gray-400">
