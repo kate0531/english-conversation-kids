@@ -6,6 +6,7 @@ import { playClick } from "@/lib/sounds";
 import { useTTS } from "@/hooks/useTTS";
 import SentenceLine from "./SentenceLine";
 import HomeButton from "@/components/HomeButton";
+import { saveRecentProPractice } from "@/lib/recentLearningHistory";
 
 const NOTE_LINE_HEIGHT = "3rem"; /* 영어 2줄 기준 회색선 높이 */
 
@@ -38,6 +39,25 @@ export default function WritingTimePage({ onBackToGate }: WritingTimePageProps) 
     const t = setTimeout(() => setShowLoadingBulb(false), 2000);
     return () => clearTimeout(t);
   }, [showLoadingBulb]);
+
+  /** Writing 문장 → Say It Like a Pro 최근 학습으로 저장 (말하기 연습용) */
+  useEffect(() => {
+    if (!prompt.trim() || lines.length === 0) return;
+    const practiceLines: { speaker: "ai" | "user"; text: string }[] = [
+      { speaker: "ai", text: prompt.trim() },
+    ];
+    for (const l of lines) {
+      const t = (l.corrected?.trim() || l.text.trim());
+      if (t) practiceLines.push({ speaker: "user", text: t });
+    }
+    saveRecentProPractice({
+      updatedAt: Date.now(),
+      source: "writing",
+      label: selectedTopic ? `Writing · ${selectedTopic}` : "Writing Time",
+      partnerName: "Writing",
+      lines: practiceLines,
+    });
+  }, [lines, prompt, selectedTopic]);
 
   useEffect(() => {
     if (!prompt?.trim()) {

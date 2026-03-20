@@ -49,6 +49,23 @@ function langToWhisperCode(lang: string): string {
   return "en";
 }
 
+/** Blob MIME과 맞는 파일명 (webm인데 mp4로 녹음하면 Whisper/OpenAI가 거부할 수 있음) */
+function audioFilenameForBlob(blob: Blob): string {
+  const m = (blob.type || "").toLowerCase();
+  if (m.includes("mp4") || m.includes("m4a") || m.includes("aac") || m.includes("caf"))
+    return "audio.m4a";
+  if (m.includes("mpeg") || m.includes("mp3")) return "audio.mp3";
+  if (m.includes("wav")) return "audio.wav";
+  if (m.includes("ogg")) return "audio.ogg";
+  return "audio.webm";
+}
+
+/**
+ * Vercel Hobby: 서버 함수 처리 한도가 짧아 긴 녹음+Whisper가 타임아웃(504) 나기 쉬움.
+ * 로컬(Cursor)은 한도가 널널해 같은 코드가 되는 경우만 있음.
+ */
+const MAX_RECORDING_MS = 9000;
+
 /**
  * 음성 인식: OpenAI Whisper(/api/stt) 우선(마이크 녹음), 실패 시 브라우저 Web Speech API
  */
@@ -76,16 +93,35 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
     async (blob: Blob): Promise<boolean> => {
       if (blob.size < 80) return true;
       const fd = new FormData();
-      fd.append("file", blob, "audio.webm");
+      fd.append("file", blob, audioFilenameForBlob(blob));
       fd.append("language", langToWhisperCode(options?.lang ?? "en-US"));
       try {
-        const res = await fetch("/api/stt", { method: "POST", body: fd });
-        if (!res.ok) return false;
+        const res = await fetch("/api/stt", {
+          method: "POST",
+          body: fd,
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          let detail = res.statusText;
+          try {
+            const errJson = (await res.json()) as { error?: string };
+            if (errJson?.error) detail = errJson.error;
+          } catch {
+            /* ignore */
+          }
+          console.warn("[STT] /api/stt 실패:", res.status, detail);
+          return false;
+        }
         const data = (await res.json()) as { text?: string };
         const text = typeof data.text === "string" ? data.text.trim() : "";
-        if (text) onResultCb.current?.(text);
+        if (!text) {
+          console.warn("[STT] Whisper 빈 텍스트, blob 크기:", blob.size);
+          return false;
+        }
+        onResultCb.current?.(text);
         return true;
-      } catch {
+      } catch (e) {
+        console.warn("[STT] 네트워크/요청 오류:", e);
         return false;
       }
     },
@@ -98,7 +134,9 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
       timeoutRef.current = null;
       if (recorderRef.current && recorderRef.current.state === "recording") {
         try {
-          recorderRef.current.stop();
+          const rec = recorderRef.current;
+          if (typeof rec.requestData === "function") rec.requestData();
+          rec.stop();
         } catch (_) {
           stopStream();
           setIsListening(false);
@@ -111,7 +149,7 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
         }
         setIsListening(false);
       }
-    }, 12000);
+    }, MAX_RECORDING_MS);
   }, [stopStream]);
 
   const startWebSpeech = useCallback(() => {
@@ -151,14 +189,21 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
         }
+        /** stopStream()이 chunksRef를 비우므로, 먼저 녹음 조각을 복사 */
+        const chunkParts = chunksRef.current.slice();
+        chunksRef.current = [];
         stopStream();
         setIsListening(false);
-        const blob = new Blob(chunksRef.current, { type: mime });
-        chunksRef.current = [];
+        const blob = new Blob(chunkParts, { type: mime });
+        if (blob.size < 80) {
+          startWebSpeech();
+          return;
+        }
         const ok = await transcribeBlob(blob);
         if (!ok) startWebSpeech();
       };
-      rec.start();
+      /** timeslice: 일부 환경에서 stop 시점에 ondataavailable이 비는 것 방지 */
+      rec.start(250);
       recorderRef.current = rec;
       setIsListening(true);
     } catch {
@@ -234,6 +279,12 @@ export function useSpeechRecognition(options?: { lang?: string; onResult?: (text
       timeoutRef.current = null;
     }
     if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      try {
+        const rec = recorderRef.current;
+        if (typeof rec.requestData === "function") rec.requestData();
+      } catch {
+        /* ignore */
+      }
       try {
         recorderRef.current.stop();
       } catch (_) {

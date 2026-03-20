@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { SubtitleMode } from "@/types/freeTalking";
 import type { FreeTalkingScenario, FreeTalkingConversationTurn } from "@/types/freeTalking";
 import { getBackgroundImageUrl, PARTNER_IMAGE_FEMALE } from "@/data/freeTalkingData";
@@ -49,11 +49,20 @@ export default function FreeTalkingMainScreen({
   const [hintVisible, setHintVisible] = useState(false);
 
   const partnerImageUrl = scenario.partner?.imageUrl ?? PARTNER_IMAGE_FEMALE;
-  const { speak } = useTTS({ gender: "female" }); // 다정한 톤 (느리게 + 낮은 피치)
+  const { speak } = useTTS({ gender: "female" }); // OpenAI TTS nova 우선 (질문 음원)
   const bgUrl = getBackgroundImageUrl(scenario.visualKeywords);
 
   const conversation = scenario?.conversation ?? [];
   const currentTurn = conversation[currentTurnIndex];
+
+  /** 질문 길이에 맞춰 Hailey 음성 들을 시간 (OpenAI TTS 대비) */
+  const aiListenDelayMs = useMemo(() => {
+    const t = currentTurn?.speaker === "ai" ? (currentTurn.text ?? "") : "";
+    const base = 2600;
+    const perChar = 52;
+    return Math.min(11000, base + t.length * perChar);
+  }, [currentTurn?.speaker, currentTurn?.text]);
+
   const isUserTurn = currentTurn?.speaker === "user";
   const isDone = currentTurnIndex >= conversation.length;
 
@@ -92,12 +101,12 @@ export default function FreeTalkingMainScreen({
     onResult: handleVoiceResult,
   });
 
-  // AI 턴: 카운트다운 끝난 뒤 TTS 재생 → 띵동 → 다음 턴(유저)으로 전환
+  // AI 턴: 카운트다운 끝난 뒤 질문 음원(TTS) 재생 → 띵동 → 다음 턴(유저)으로 전환
   useEffect(() => {
     if (showCountdown || !currentTurn || currentTurn.speaker !== "ai" || isDone) return;
     speak(currentTurn.text ?? "");
     const isLastTurn = currentTurnIndex === conversation.length - 1;
-    const delay = 4500; // 듣는 시간 4.5초 (초등학생용 - 힌트·스피커 버튼 여유)
+    const delay = aiListenDelayMs;
     const t = setTimeout(() => {
       playDing(); // 음원 끝난 다음에 띵동
       if (isLastTurn) {
@@ -107,7 +116,24 @@ export default function FreeTalkingMainScreen({
       }
     }, delay);
     return () => clearTimeout(t);
-  }, [showCountdown, currentTurnIndex, currentTurn?.speaker, currentTurn?.text, conversation.length, isDone, speak, onAllComplete]);
+  }, [
+    showCountdown,
+    currentTurnIndex,
+    currentTurn?.speaker,
+    currentTurn?.text,
+    conversation.length,
+    isDone,
+    speak,
+    onAllComplete,
+    aiListenDelayMs,
+  ]);
+
+  const handleReplayHaileyQuestion = useCallback(() => {
+    const texts = getLastAiQuestionTexts(conversation, currentTurnIndex);
+    if (!texts?.en?.trim()) return;
+    playClick();
+    speak(texts.en);
+  }, [conversation, currentTurnIndex, speak]);
 
   if (isDone || !currentTurn) return null;
 
@@ -146,6 +172,20 @@ export default function FreeTalkingMainScreen({
             subtitleTexts={subtitleTexts}
           />
         </div>
+
+        {/* Hailey 질문 음원 다시 듣기 (테마별 질문 TTS) */}
+        {subtitleTexts?.en && (
+          <div className="mb-3 w-full max-w-[300px] flex justify-center">
+            <button
+              type="button"
+              onClick={handleReplayHaileyQuestion}
+              className="inline-flex items-center gap-1.5 rounded-full border border-pink-200/90 bg-white/90 px-3 py-1.5 text-xs font-medium text-pink-600 hover:bg-pink-50 shadow-sm"
+            >
+              <span aria-hidden>🔊</span>
+              Hailey 질문 다시 듣기
+            </button>
+          </div>
+        )}
 
         {/* 유저 턴: 스피커→듣는중→잠시만요 */}
         <div className="mb-6">

@@ -1,7 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIApiKey } from "@/lib/openai";
 
+/** Vercel Pro 등에서 긴 음성 허용. Hobby는 플랜상 ~10초로 잘리므로 클라이언트 녹음도 짧게 유지 */
 export const maxDuration = 60;
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function isBlobLike(v: unknown): v is Blob {
+  return (
+    typeof v === "object" &&
+    v != null &&
+    typeof (v as Blob).arrayBuffer === "function" &&
+    typeof (v as Blob).size === "number"
+  );
+}
 
 /** OpenAI Whisper STT (multipart audio → 텍스트) */
 export async function POST(req: NextRequest) {
@@ -15,12 +27,16 @@ export async function POST(req: NextRequest) {
     const file = formData.get("file");
     const language = (formData.get("language") as string) || "en";
 
-    if (!file || !(file instanceof Blob)) {
+    // Vercel/Node에서 File이 Blob과 다른 프로토타입 체인일 수 있어 완화 검사
+    if (!isBlobLike(file)) {
       return NextResponse.json({ error: "file required" }, { status: 400 });
     }
 
     const openaiForm = new FormData();
-    const name = file instanceof File ? file.name : "audio.webm";
+    const name =
+      file instanceof File && file.name
+        ? file.name
+        : guessAudioFilename(file.type);
     openaiForm.append("file", file, name);
     openaiForm.append("model", "whisper-1");
     if (language && language.length === 2) {
@@ -51,4 +67,13 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+function guessAudioFilename(mime: string): string {
+  const m = (mime || "").toLowerCase();
+  if (m.includes("mp4") || m.includes("m4a") || m.includes("aac")) return "audio.m4a";
+  if (m.includes("mpeg") || m.includes("mp3")) return "audio.mp3";
+  if (m.includes("wav")) return "audio.wav";
+  if (m.includes("ogg")) return "audio.ogg";
+  return "audio.webm";
 }

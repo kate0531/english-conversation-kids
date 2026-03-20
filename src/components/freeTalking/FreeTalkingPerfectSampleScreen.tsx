@@ -8,6 +8,8 @@ import { playSampleConversationWithOpenAI } from "@/hooks/useTTS";
 interface FreeTalkingPerfectSampleScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
   partnerName?: string;
+  /** 출처 안내 (예: Conversation Time · …) */
+  practiceSubtitle?: string;
   onNext: () => void;
   onBack: () => void;
 }
@@ -16,6 +18,7 @@ interface FreeTalkingPerfectSampleScreenProps {
 export default function FreeTalkingPerfectSampleScreen({
   sampleConversation,
   partnerName = "Hailey",
+  practiceSubtitle,
   onNext,
   onBack,
 }: FreeTalkingPerfectSampleScreenProps) {
@@ -47,9 +50,14 @@ export default function FreeTalkingPerfectSampleScreen({
       </header>
 
       <main className="flex-1 px-4 py-6 max-w-xl mx-auto w-full flex flex-col">
-        <p className="text-violet-600/90 text-sm font-medium mb-4 text-center">
+        <p className="text-violet-600/90 text-sm font-medium mb-2 text-center">
           미션 완료까지 얼마 안 남았어요!
         </p>
+        {practiceSubtitle ? (
+          <p className="text-violet-500/85 text-xs font-medium mb-4 text-center rounded-full bg-violet-100/70 py-1.5 px-3 mx-auto max-w-md">
+            {practiceSubtitle}
+          </p>
+        ) : null}
 
         {/* 들어보기: Hailey + 나 대화 전체 재생 */}
         <button

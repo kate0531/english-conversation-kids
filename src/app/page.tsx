@@ -22,6 +22,10 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import GateScreen from "@/components/GateScreen";
 import WritingTimePage from "@/components/writing/WritingTimePage";
 import HomeButton from "@/components/HomeButton";
+import {
+  buildSampleLinesFromSpeaking,
+  saveRecentProPractice,
+} from "@/lib/recentLearningHistory";
 
 type AppMode = "gate" | "speaking" | "writing";
 
@@ -207,6 +211,23 @@ export default function ConversationPage() {
   useEffect(() => {
     if (showGoodJobPopup) playPopup();
   }, [showGoodJobPopup]);
+
+  /** Say It Like a Pro용: 최근 스피킹 학습 대화 저장 */
+  useEffect(() => {
+    const lines = buildSampleLinesFromSpeaking(messages, results);
+    if (!lines.some((l) => l.speaker === "user" && l.text.trim())) return;
+    const partnerName =
+      results.some((r) => r.turnIndex >= 4) || messages.some((m) => m.turnIndex >= 4)
+        ? "Hailey"
+        : "Teacher";
+    saveRecentProPractice({
+      updatedAt: Date.now(),
+      source: "speaking",
+      label: "Conversation · Free Talking Time",
+      partnerName,
+      lines,
+    });
+  }, [messages, results]);
 
   const hasStarted = messages.length > 0;
   const isWaitingAnswer = currentQuestion && messages[messages.length - 1]?.role === "question";

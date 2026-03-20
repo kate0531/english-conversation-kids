@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import FreeTalkingGateScreen from "@/components/freeTalking/FreeTalkingGateScreen";
 import FreeTalkingMainScreen from "@/components/freeTalking/FreeTalkingMainScreen";
 import FreeTalkingPerfectSampleScreen from "@/components/freeTalking/FreeTalkingPerfectSampleScreen";
@@ -11,6 +11,11 @@ import TaskScoreScreen from "@/components/freeTalking/TaskScoreScreen";
 import { getScenarioForTopic } from "@/data/freeTalkingData";
 import type { FreeTalkingScenario, FreeTalkingSampleLine } from "@/types/freeTalking";
 import Link from "next/link";
+import {
+  loadRecentProPractice,
+  saveRecentProPractice,
+  recentSourceLabel,
+} from "@/lib/recentLearningHistory";
 
 /** 시나리오 + (교정/추천 문장 우선, 없으면 내가 말한 문장)으로 들어보기/따라 말하기용 대화 생성 */
 function buildSampleConversation(
@@ -148,8 +153,54 @@ export default function FreeTalkingPage() {
     return buildSampleConversation(scenario, userAnswers, correctedSentences);
   }, [scenario, userAnswers, correctedSentences]);
   const hasUserAnswers = userAnswers.length > 0;
-  const sayItLikeAProConversation =
-    scenario && hasUserAnswers ? sampleConversationFromUser : scenario?.perfectSampleConversation ?? [];
+
+  /** 이번 Free Talking 세션 복습용으로 최근 학습에 저장 */
+  useEffect(() => {
+    if (!scenario || userAnswers.length === 0) return;
+    const lines = buildSampleConversation(scenario, userAnswers, correctedSentences);
+    if (!lines.some((l) => l.speaker === "user" && l.text.trim())) return;
+    saveRecentProPractice({
+      updatedAt: Date.now(),
+      source: "freeTalking",
+      label: scenario.topic,
+      partnerName: scenario.partner?.name ?? "Hailey",
+      lines,
+    });
+  }, [scenario, userAnswers, correctedSentences]);
+
+  /** Pro 단계에서만 저장된 최근 학습 불러오기 (같은 탭에서 Conversation 등을 마친 직후 반영) */
+  const storedForPro = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    if (step !== "perfectSample" && step !== "sampleFollow") return null;
+    return loadRecentProPractice();
+  }, [step]);
+
+  const sayItLikeAProConversation = useMemo(() => {
+    if (scenario && hasUserAnswers) {
+      return sampleConversationFromUser;
+    }
+    if (storedForPro?.lines?.length) {
+      return storedForPro.lines;
+    }
+    return scenario?.perfectSampleConversation ?? [];
+  }, [scenario, hasUserAnswers, sampleConversationFromUser, storedForPro]);
+
+  const proPracticePartnerName =
+    scenario && hasUserAnswers
+      ? scenario.partner?.name ?? "Hailey"
+      : storedForPro?.partnerName ?? scenario?.partner?.name ?? "Hailey";
+
+  const proPracticeSubtitle = useMemo(() => {
+    if (scenario && hasUserAnswers) {
+      return `이번 주제 · ${scenario.topic}`;
+    }
+    if (storedForPro?.lines?.length) {
+      const src = recentSourceLabel(storedForPro.source);
+      const lb = storedForPro.label?.trim();
+      return lb ? `${src} · ${lb}` : `${src}에서 한 학습을 따라 말해요`;
+    }
+    return "샘플 대화를 들어보고 따라 말해요";
+  }, [scenario, hasUserAnswers, storedForPro]);
 
   if (step === "gate") {
     return (
@@ -190,7 +241,8 @@ export default function FreeTalkingPage() {
     return (
       <FreeTalkingPerfectSampleScreen
         sampleConversation={sayItLikeAProConversation}
-        partnerName={scenario.partner?.name}
+        partnerName={proPracticePartnerName}
+        practiceSubtitle={proPracticeSubtitle}
         onNext={handlePerfectSampleNext}
         onBack={handleBackFromPerfectSample}
       />
@@ -201,6 +253,7 @@ export default function FreeTalkingPage() {
     return (
       <FreeTalkingSampleFollowScreen
         sampleConversation={sayItLikeAProConversation}
+        practiceSubtitle={proPracticeSubtitle}
         onComplete={handleSampleComplete}
         onBack={handleBackFromSample}
       />

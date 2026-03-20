@@ -71,9 +71,10 @@ git push -u origin main
    - **Root Directory**: `./` (기본값)
    - **Build Command**: `npm run build` (기본값)
    - **Output Directory**: `.next` (기본값)
-5. **"Environment Variables"** 섹션에서:
-   - **Name**: `NEXT_PUBLIC_OPENAI_API_KEY`
-   - **Value**: 실제 OpenAI API 키 입력
+5. **"Environment Variables"** 섹션에서 (아래 **필수** 참고):
+   - **Name**: `OPENAI_API_KEY`
+   - **Value**: OpenAI API 키 (`sk-...`)
+   - **Environment**: Production, Preview 모두 체크 권장
    - **"Add"** 클릭
 6. **"Deploy"** 클릭
 
@@ -86,16 +87,22 @@ git push -u origin main
 
 ### 3단계: 환경변수 설정 (OpenAI API 키)
 
-**중요**: GPT 교정 기능을 사용하려면 환경변수를 설정해야 합니다.
+**중요**: 로컬 `.env.local`은 Vercel에 올라가지 않습니다. 아래 변수를 Vercel에 등록하지 않으면 TTS·음성인식(Whisper)·교정 API가 **503** (`OPENAI_API_KEY not set`) 으로 실패합니다. 등록 후 **Redeploy** 필수.
 
 1. Vercel 대시보드에서 프로젝트 선택
 2. **"Settings"** → **"Environment Variables"** 클릭
 3. 다음 변수 추가:
-   - **Key**: `NEXT_PUBLIC_OPENAI_API_KEY`
+   - **Key**: `OPENAI_API_KEY` (권장) 또는 `NEXT_PUBLIC_OPENAI_API_KEY`
    - **Value**: OpenAI API 키 (https://platform.openai.com/api-keys 에서 발급)
    - **Environment**: Production, Preview, Development 모두 선택
 4. **"Save"** 클릭
 5. **"Deployments"** 탭에서 최신 배포를 다시 배포 (환경변수 반영)
+
+**음성인식이 Cursor(로컬)에서만 되고 Vercel에서 안 될 때**
+
+- **Hobby 플랜**은 서버 처리 시간이 짧아, 긴 녹음 + Whisper가 **타임아웃**날 수 있습니다. **짧게 말한 뒤** 바로 마이크를 다시 눌러 녹음을 끝내 보세요(앱은 약 9초 내 자동 종료).
+- 일부 브라우저는 녹음이 **webm이 아니라 mp4**인데 파일 이름이 안 맞으면 전사가 실패할 수 있어, 저장소 최신 코드는 MIME에 맞는 확장자를 보냅니다 → **푸시 후 재배포**하세요.
+- STT 실패 후 **Web Speech** 폴백은 카카오·인앱 브라우저 등에서 막힐 수 있습니다. **Chrome**으로 시도해 보세요.
 
 ---
 

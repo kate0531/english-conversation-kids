@@ -8,6 +8,7 @@ import { playClick, playDing, playBuzzer } from "@/lib/sounds";
 
 interface FreeTalkingSampleFollowScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
+  practiceSubtitle?: string;
   onComplete: () => void;
   onBack: () => void;
 }
@@ -33,6 +34,7 @@ function compareWithTarget(target: string, spoken: string): { text: string; corr
 
 export default function FreeTalkingSampleFollowScreen({
   sampleConversation,
+  practiceSubtitle,
   onComplete,
   onBack,
 }: FreeTalkingSampleFollowScreenProps) {
@@ -112,6 +114,11 @@ export default function FreeTalkingSampleFollowScreen({
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-4 py-6 overflow-y-auto">
+        {practiceSubtitle ? (
+          <p className="text-violet-500/90 text-xs font-medium mb-4 text-center rounded-full bg-violet-100/80 py-1.5 px-3 max-w-md">
+            {practiceSubtitle}
+          </p>
+        ) : null}
         {/* 위: 따라 말할 문장 (샘플) */}
         <div className="w-full max-w-md rounded-2xl border-2 border-violet-200 bg-white p-6 shadow-lg mb-6">
           <p className="text-center text-lg font-medium text-violet-800">
