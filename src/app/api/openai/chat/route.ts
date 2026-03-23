@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIApiKey } from "@/lib/openai";
+import { getPrompt, type PromptKey } from "@/lib/prompts";
+
+function isPromptKey(value: unknown): value is PromptKey {
+  return (
+    value === "writingGrammar" ||
+    value === "writingAnalyze" ||
+    value === "freeTalkingCorrect" ||
+    value === "speakingEvaluate" ||
+    value === "sessionThreeTurnPlanner"
+  );
+}
 
 /**
  * OpenAI Chat Completions 프록시
@@ -17,9 +28,48 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { messages, model = "gpt-4o-mini", temperature, max_tokens } = body;
+    const {
+      messages,
+      promptKey,
+      userInput,
+      model = "gpt-4o-mini",
+      temperature,
+      max_tokens,
+    } = body as {
+      messages?: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+      promptKey?: unknown;
+      userInput?: unknown;
+      model?: string;
+      temperature?: number;
+      max_tokens?: number;
+    };
 
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+    let finalMessages = messages;
+
+    if (promptKey !== undefined) {
+      if (!isPromptKey(promptKey)) {
+        return NextResponse.json({ error: "invalid promptKey" }, { status: 400 });
+      }
+
+      const systemPrompt = getPrompt(promptKey);
+
+      if (Array.isArray(messages) && messages.length > 0) {
+        finalMessages = [{ role: "system", content: systemPrompt }, ...messages];
+      } else {
+        if (typeof userInput !== "string" || !userInput.trim()) {
+          return NextResponse.json(
+            { error: "userInput is required when messages are omitted" },
+            { status: 400 }
+          );
+        }
+        finalMessages = [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userInput.trim() },
+        ];
+      }
+    }
+
+    if (!finalMessages || !Array.isArray(finalMessages) || finalMessages.length === 0) {
       return NextResponse.json(
         { error: "messages array is required" },
         { status: 400 }
@@ -34,7 +84,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model,
-        messages,
+        messages: finalMessages,
         temperature: temperature ?? 0.7,
         max_tokens: max_tokens ?? 500,
       }),

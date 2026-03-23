@@ -6,11 +6,13 @@ import { FREE_TALK_TOPICS } from "@/data/freeTalkingData";
 interface FreeTalkingGateScreenProps {
   onSelectTopic: (topic: string) => void;
   onBack: () => void;
+  isLoadingScenario?: boolean;
 }
 
 export default function FreeTalkingGateScreen({
   onSelectTopic,
   onBack,
+  isLoadingScenario = false,
 }: FreeTalkingGateScreenProps) {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-rose-50 via-pink-50/80 to-amber-50/60">
@@ -33,7 +35,11 @@ export default function FreeTalkingGateScreen({
 
       <main className="flex-1 overflow-y-auto px-4 py-6">
         <div className="text-center mb-6">
-          <p className="text-sm text-gray-500">주제를 고르면 영어 미션이 시작돼요!</p>
+          <p className="text-sm text-gray-500">
+            {isLoadingScenario
+              ? "AI가 3턴 미션을 만들고 있어요..."
+              : "주제를 고르면 영어 미션이 시작돼요!"}
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-3 max-w-lg mx-auto relative z-10">
@@ -49,7 +55,8 @@ export default function FreeTalkingGateScreen({
                   /* 효과음 실패해도 화면 전환은 됨 */
                 }
               }}
-              className="relative z-10 cursor-pointer rounded-xl border-2 border-pink-200 bg-white px-4 py-4 text-left text-sm font-medium text-gray-800 hover:bg-pink-50 hover:border-pink-300 transition shadow-sm active:scale-[0.98] touch-manipulation"
+              disabled={isLoadingScenario}
+              className="relative z-10 cursor-pointer rounded-xl border-2 border-pink-200 bg-white px-4 py-4 text-left text-sm font-medium text-gray-800 hover:bg-pink-50 hover:border-pink-300 transition shadow-sm active:scale-[0.98] touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {topic}
             </button>

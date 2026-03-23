@@ -10,6 +10,7 @@ import SentenceEvaluationScreen from "@/components/freeTalking/SentenceEvaluatio
 import TaskScoreScreen from "@/components/freeTalking/TaskScoreScreen";
 import { getScenarioForTopic } from "@/data/freeTalkingData";
 import type { FreeTalkingScenario, FreeTalkingSampleLine } from "@/types/freeTalking";
+import { buildThreeTurnScenario } from "@/lib/freeTalkingPlanner";
 import Link from "next/link";
 import {
   loadRecentProPractice,
@@ -52,6 +53,7 @@ type FreeTalkingStep =
 export default function FreeTalkingPage() {
   const [step, setStep] = useState<FreeTalkingStep>("gate");
   const [scenario, setScenario] = useState<FreeTalkingScenario | null>(null);
+  const [isBuildingScenario, setIsBuildingScenario] = useState(false);
   const [userAnswers, setUserAnswers] = useState<string[]>([]);
   const [correctedSentences, setCorrectedSentences] = useState<string[]>([]);
   const [totalScore, setTotalScore] = useState(0);
@@ -60,11 +62,22 @@ export default function FreeTalkingPage() {
   >([]);
   const [evalSentences, setEvalSentences] = useState<string[]>([]);
 
-  const handleSelectTopic = useCallback((topic: string) => {
-    const s = getScenarioForTopic(topic);
-    setScenario(s);
-    setStep("main");
-  }, []);
+  const handleSelectTopic = useCallback(async (topic: string) => {
+    if (isBuildingScenario) return;
+    setIsBuildingScenario(true);
+    try {
+      const generated = await buildThreeTurnScenario(topic);
+      const s = generated ?? getScenarioForTopic(topic);
+      setScenario(s);
+      setStep("main");
+    } catch {
+      const fallback = getScenarioForTopic(topic);
+      setScenario(fallback);
+      setStep("main");
+    } finally {
+      setIsBuildingScenario(false);
+    }
+  }, [isBuildingScenario]);
 
   const handleTurnComplete = useCallback((answer: string) => {
     setUserAnswers((prev) => [...prev, answer]);
@@ -207,6 +220,7 @@ export default function FreeTalkingPage() {
       <FreeTalkingGateScreen
         onSelectTopic={handleSelectTopic}
         onBack={() => (window.location.href = "/")}
+        isLoadingScenario={isBuildingScenario}
       />
     );
   }

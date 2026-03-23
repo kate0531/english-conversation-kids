@@ -65,7 +65,21 @@ npm run dev
 }
 ```
 
+**세션 3턴 자동 설계 예시 (`promptKey` 사용):**
+
+```json
+{
+  "model": "gpt-4o-mini",
+  "promptKey": "sessionThreeTurnPlanner",
+  "userInput": "주제: 주말에 가족과 공원 가기. 초등 3학년 수준으로 3턴 대화 질문 만들어줘.",
+  "temperature": 0.7,
+  "max_tokens": 700
+}
+```
+
 - `messages`: OpenAI 형식 그대로 배열로 전달
+- `promptKey`: 서버에 저장된 프롬프트 키를 지정하면 system 프롬프트가 자동 주입됩니다.
+- `userInput`: `messages`를 생략하고 `promptKey`만 쓸 때 사용자 입력으로 사용됩니다.
 - `model`: 생략 시 `gpt-4o-mini`
 - `temperature`, `max_tokens`: 선택
 

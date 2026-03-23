@@ -10,6 +10,7 @@
 | `writingAnalyze` | Writing Time - 글 분석 |
 | `freeTalkingCorrect` | Free Talking Time - 대화 교정·발화 코멘트 |
 | `speakingEvaluate` | 홈 Speaking Time - 질문 답변 교정·채점 (LLM) |
+| `sessionThreeTurnPlanner` | 세션1→2→3 조합형 3턴 질문 설계 |
 
 ## 수정 방법
 

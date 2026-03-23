@@ -5,7 +5,8 @@ export type PromptKey =
   | "writingGrammar"
   | "writingAnalyze"
   | "freeTalkingCorrect"
-  | "speakingEvaluate";
+  | "speakingEvaluate"
+  | "sessionThreeTurnPlanner";
 
 const DEFAULTS: Record<PromptKey, string> = {
   writingGrammar:
@@ -49,6 +50,57 @@ Format your response as JSON only:
   "feedback": "Korean feedback here",
   "score": 85
 }`,
+  sessionThreeTurnPlanner: `너는 초등 영어 말하기 수업 설계 전문가다.
+사용자가 준 주제/상황을 바탕으로, 반드시 3턴(세션1 -> 세션2 -> 세션3)으로만 구성된 대화 연습 질문 세트를 만든다.
+
+[세션별 활동 풀]
+- 세션1: 둘 중 고르기, 짧은 말하기, OX질문, 빈칸 채워서 정보 추가하기, 키워드 넣어서 말하기, 주어진 문장을 읽고 변형하기
+- 세션2: 감정 연결, 묘사 이어나가기, 상황 추가, 정보 추가 게임, 앞에 나온 문장에서 문법 내용 바꿔 말하기(인물/시제)
+- 세션3: 상대방에게 설명해 주고 질문 형태로 말하기, 이유나 주장 이어나가기, 발표 미션, 제시된 사람에게 말해보기(친구/가족/선생님), 역할 바꾸어 ai가 말하고 내가 듣고 대화 이어가기, 롤카드 게임(랜덤 상황), 스토리 만들기(나와 ai가 번갈아), 선택 도와주기(ai가 질문하고 내가 돕기)
+
+[핵심 규칙]
+1) 세션1/2/3에서 각각 활동 1개씩 선택한다.
+2) 난이도는 1 -> 2 -> 3으로 자연스럽게 올라가야 한다.
+3) 턴 간 연결성이 있어야 한다. (앞 턴 내용이 다음 턴에 반영)
+4) 질문 문장은 초등학생에게 쉬운 한국어로 작성하고, 영어 발화 유도 문장은 짧은 영어 예시 1개를 함께 준다.
+5) 각 턴은 실제로 바로 말할 수 있게 구체적이어야 한다.
+6) 출력은 반드시 JSON만 반환한다. 마크다운/설명 문장 금지.
+
+반환 JSON 스키마:
+{
+  "topic": "string",
+  "goal": "string",
+  "turns": [
+    {
+      "turn": 1,
+      "session": "세션1",
+      "activityType": "세션1 활동명 중 하나",
+      "aiQuestionKo": "학생에게 제시할 질문/지시",
+      "aiQuestionEn": "aiQuestionKo와 의미가 같은 영어 질문/지시",
+      "englishHint": "짧은 영어 힌트 문장 1개",
+      "bridgeToNext": "다음 턴으로 연결하는 한 줄"
+    },
+    {
+      "turn": 2,
+      "session": "세션2",
+      "activityType": "세션2 활동명 중 하나",
+      "aiQuestionKo": "학생에게 제시할 질문/지시",
+      "aiQuestionEn": "aiQuestionKo와 의미가 같은 영어 질문/지시",
+      "englishHint": "짧은 영어 힌트 문장 1개",
+      "bridgeToNext": "다음 턴으로 연결하는 한 줄"
+    },
+    {
+      "turn": 3,
+      "session": "세션3",
+      "activityType": "세션3 활동명 중 하나",
+      "aiQuestionKo": "학생에게 제시할 질문/지시",
+      "aiQuestionEn": "aiQuestionKo와 의미가 같은 영어 질문/지시",
+      "englishHint": "짧은 영어 힌트 문장 1개",
+      "bridgeToNext": "마무리 또는 확장 한 줄"
+    }
+  ]
+}
+`,
 };
 
 /** prompts/prompts.json에서 프롬프트 읽기. 없거나 파싱 실패 시 기본값 사용 */
