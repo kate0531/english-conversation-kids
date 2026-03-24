@@ -50,6 +50,15 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
           <span className="font-semibold text-gray-800 block">Free Talking Time</span>
           <span className="text-sm text-gray-500 mt-1 block">상황 미션 연습</span>
         </Link>
+        <Link
+          href="/textbook-test"
+          onClick={playClick}
+          className="flex-1 rounded-2xl p-6 border-2 border-amber-400 bg-white/90 shadow-md hover:bg-amber-50 hover:border-amber-500 hover:shadow-lg transition-all duration-200 text-center no-underline"
+        >
+          <span className="text-2xl mb-2 block">📚</span>
+          <span className="font-semibold text-gray-800 block">교재 TEST</span>
+          <span className="text-sm text-gray-500 mt-1 block">스토리·단어·문법 샘플</span>
+        </Link>
       </div>
     </div>
   );

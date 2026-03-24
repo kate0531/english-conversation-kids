@@ -62,6 +62,7 @@ export function useSpeechRecognition(options?: {
   lang?: string;
   onResult?: (text: string) => void;
   onInterim?: (text: string) => void;
+  onStream?: (stream: MediaStream) => void;
 }) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -76,8 +77,10 @@ export function useSpeechRecognition(options?: {
 
   const onResultCb = useRef(options?.onResult);
   const onInterimCb = useRef(options?.onInterim);
+  const onStreamCb = useRef(options?.onStream);
   onResultCb.current = options?.onResult;
   onInterimCb.current = options?.onInterim;
+  onStreamCb.current = options?.onStream;
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const webSpeechStartedRef = useRef(false);
@@ -222,6 +225,7 @@ export function useSpeechRecognition(options?: {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      onStreamCb.current?.(stream);
       const mime = pickRecorderMime();
       const rec = new MediaRecorder(stream, { mimeType: mime });
       chunksRef.current = [];
