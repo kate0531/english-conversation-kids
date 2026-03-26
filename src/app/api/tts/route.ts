@@ -27,11 +27,11 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "tts-1-hd",
+        model: "tts-1",
         input: text.trim().slice(0, 4096),
         voice: voiceId,
         response_format: "mp3",
-        speed: 1.0,
+        speed: 0.82,
       }),
     });
 

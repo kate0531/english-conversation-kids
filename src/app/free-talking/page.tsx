@@ -8,7 +8,7 @@ import FreeTalkingResultScreen from "@/components/freeTalking/FreeTalkingResultS
 import FreeTalkingSampleFollowScreen from "@/components/freeTalking/FreeTalkingSampleFollowScreen";
 import SentenceEvaluationScreen from "@/components/freeTalking/SentenceEvaluationScreen";
 import TaskScoreScreen from "@/components/freeTalking/TaskScoreScreen";
-import { getScenarioForTopic } from "@/data/freeTalkingData";
+import { getScenarioForTopic, getRandomAdultFemalePartnerImageUrl } from "@/data/freeTalkingData";
 import type { FreeTalkingScenario, FreeTalkingSampleLine } from "@/types/freeTalking";
 import { buildThreeTurnScenario } from "@/lib/freeTalkingPlanner";
 import Link from "next/link";
@@ -50,6 +50,17 @@ type FreeTalkingStep =
   | "evaluation"
   | "taskScore";
 
+function applyRandomPartnerPhoto(s: FreeTalkingScenario): FreeTalkingScenario {
+  return {
+    ...s,
+    partner: {
+      ...s.partner,
+      imageUrl: getRandomAdultFemalePartnerImageUrl(),
+      gender: "female",
+    },
+  };
+}
+
 export default function FreeTalkingPage() {
   const [step, setStep] = useState<FreeTalkingStep>("gate");
   const [scenario, setScenario] = useState<FreeTalkingScenario | null>(null);
@@ -66,13 +77,27 @@ export default function FreeTalkingPage() {
     if (isBuildingScenario) return;
     setIsBuildingScenario(true);
     try {
+      const genRes = await fetch("/api/free-talking/generate-scenario", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic }),
+        cache: "no-store",
+      });
+      if (genRes.ok) {
+        const data = (await genRes.json()) as { scenario?: FreeTalkingScenario };
+        if (data.scenario?.conversation?.length) {
+          setScenario(applyRandomPartnerPhoto(data.scenario));
+          setStep("main");
+          return;
+        }
+      }
       const generated = await buildThreeTurnScenario(topic);
       const s = generated ?? getScenarioForTopic(topic);
-      setScenario(s);
+      setScenario(applyRandomPartnerPhoto(s));
       setStep("main");
     } catch {
       const fallback = getScenarioForTopic(topic);
-      setScenario(fallback);
+      setScenario(applyRandomPartnerPhoto(fallback));
       setStep("main");
     } finally {
       setIsBuildingScenario(false);

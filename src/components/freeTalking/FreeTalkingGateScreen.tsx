@@ -37,7 +37,7 @@ export default function FreeTalkingGateScreen({
         <div className="text-center mb-6">
           <p className="text-sm text-gray-500">
             {isLoadingScenario
-              ? "AI가 3턴 미션을 만들고 있어요..."
+              ? "AI가 주제에 맞는 질문과 그림을 만들고 있어요… (잠시만요)"
               : "주제를 고르면 영어 미션이 시작돼요!"}
           </p>
         </div>

@@ -33,6 +33,8 @@ export interface FreeTalkingScenario {
   visualKeywords: string[];
   conversation: FreeTalkingConversationTurn[];
   perfectSampleConversation: FreeTalkingSampleLine[];
+  /** AI 생성 장면 이미지 URL (있으면 배경으로 우선 사용) */
+  backgroundImageUrl?: string;
 }
 
 export interface CorrectionPoint {

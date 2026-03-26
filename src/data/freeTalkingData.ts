@@ -1,6 +1,6 @@
 import type { FreeTalkingScenario } from "@/types/freeTalking";
 
-/** 10개 주제 - School Life - After School만 mock 데이터 완성 */
+/** Free Talking 주제 (선택 시 API로 시나리오·이미지 생성, 실패 시 정적 폴백) */
 export const FREE_TALK_TOPICS = [
   "School Life - After School",
   "My Family",
@@ -12,6 +12,16 @@ export const FREE_TALK_TOPICS = [
   "Animals",
   "Weekend Plans",
   "Friends",
+  "Birthday Party",
+  "Sports Day",
+  "Healthy Habits",
+  "Dream Job",
+  "Music & Songs",
+  "My Room",
+  "Travel & Vacations",
+  "School Subjects",
+  "Helping at Home",
+  "Seasons & Nature",
 ] as const;
 
 /** Hailey - School Life용 (캐주얼, 단정한 차림) */
@@ -455,6 +465,28 @@ export const PARTNER_IMAGE_MALE =
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80";
 export const PARTNER_IMAGE_FEMALE =
   "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&q=80";
+
+/** 성인 여성 랜덤 사진 풀 (free talking 파트너용) */
+export const ADULT_FEMALE_PARTNER_IMAGES = [
+  "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&q=80",
+  "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&q=80",
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400&q=80",
+  "https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400&q=80",
+  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=400&q=80",
+  "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=400&q=80",
+  "https://images.unsplash.com/photo-1546528367-3d3cfc6a3f85?w=400&q=80",
+  "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&q=80",
+  "https://images.unsplash.com/photo-1531123414780-7427d2dc0bd4?w=400&q=80",
+  "https://images.unsplash.com/photo-1518611012118-3967928c6c99?w=400&q=80",
+  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&q=80",
+  "https://images.unsplash.com/photo-1542206395-9feb3edaa68d?w=400&q=80",
+] as const;
+
+export function getRandomAdultFemalePartnerImageUrl(): string {
+  const list = ADULT_FEMALE_PARTNER_IMAGES;
+  const idx = Math.floor(Math.random() * list.length);
+  return list[idx] ?? PARTNER_IMAGE_FEMALE;
+}
 
 /** 주제 선택 시 시나리오 반환 (School Life / My Family 시연용) */
 export function getScenarioForTopic(topic: string): FreeTalkingScenario {

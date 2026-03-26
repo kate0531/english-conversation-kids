@@ -133,17 +133,33 @@ const PAUSE_BETWEEN_LINES_MS = 380;
 const DING_BEFORE_NEXT_MS = 180;
 
 /** OpenAI TTS API로 한 문장 재생. API 사용 불가 시 { ok: false } 반환 */
-async function playTTSViaAPI(text: string, voice: string): Promise<{ ok: true } | { ok: false }> {
+async function playTTSViaAPI(
+  text: string,
+  voice: string,
+  signal?: AbortSignal
+): Promise<{ ok: true } | { ok: false }> {
   stopOpenAITTS();
-  const res = await fetch("/api/tts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, voice }),
-  });
+  let res: Response;
+  try {
+    res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, voice }),
+      signal,
+    });
+  } catch {
+    return { ok: false };
+  }
   if (!res.ok) return { ok: false };
+  if (signal?.aborted) return { ok: false };
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   return new Promise((resolve) => {
+    if (signal?.aborted) {
+      URL.revokeObjectURL(url);
+      resolve({ ok: false });
+      return;
+    }
     const audio = new Audio(url);
     currentTTSAudio = audio;
     audio.onended = () => {
@@ -164,6 +180,44 @@ async function playTTSViaAPI(text: string, voice: string): Promise<{ ok: true } 
       // 실패해도 화면 자막/흐름은 진행되도록 ok:true 처리
       resolve({ ok: true });
     });
+  });
+}
+
+/** 브라우저 내장 TTS로 즉시 재생 후 종료까지 대기 */
+function speakWithBrowserAndWait(
+  text: string,
+  gender: "female" | "male",
+  person: TTSVoicePerson,
+  lang: TTSLang
+): Promise<boolean> {
+  if (typeof window === "undefined" || !window.speechSynthesis) return Promise.resolve(false);
+  window.speechSynthesis.cancel();
+  return new Promise((resolve) => {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.volume = 0.98;
+
+    const voices = window.speechSynthesis.getVoices();
+    if (lang === "ko-KR") {
+      u.rate = 0.92;
+      u.pitch = 1.08;
+      const voice = getKoreanFemaleVoice(voices);
+      if (voice) u.voice = voice;
+    } else if (gender === "female") {
+      u.rate = 0.88;
+      u.pitch = 1.12;
+      const voice = getKindFemaleVoice(voices);
+      if (voice) u.voice = voice;
+    } else {
+      u.rate = 0.82;
+      u.pitch = 0.98;
+      const voice = getMaleVoice(voices, person);
+      if (voice) u.voice = voice;
+    }
+
+    u.onend = () => resolve(true);
+    u.onerror = () => resolve(false);
+    window.speechSynthesis.speak(u);
   });
 }
 
@@ -331,15 +385,8 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
       window.speechSynthesis?.cancel();
       stopOpenAITTS();
 
-      const voice = pickOpenAIVoice(gender, lang);
-
-      void (async () => {
-        const result = await playTTSViaAPI(normalized, voice);
-        if (!mountedRef.current) return;
-        if (!result.ok) {
-          console.warn("[TTS] /api/tts 실패 — 브라우저 내장 음성으로 대체하지 않습니다.");
-        }
-      })();
+      // 즉시 반응 우선: 한 문장 재생은 브라우저 TTS로 바로 시작
+      speakWithBrowser(normalized, gender === "male" ? "male" : "female", voicePerson, lang);
     },
     [gender, voicePerson, lang]
   );
@@ -357,13 +404,20 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
       window.speechSynthesis?.cancel();
       stopOpenAITTS();
       const voice = pickOpenAIVoice(gender, lang);
-      const result = await playTTSViaAPI(normalized, voice);
-      if (!result.ok) {
-        console.warn("[TTS] /api/tts 실패 — 브라우저 내장 음성으로 대체하지 않습니다.");
-      }
-      return result.ok;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 140);
+      const result = await playTTSViaAPI(normalized, voice, controller.signal);
+      clearTimeout(timeout);
+      if (result.ok) return true;
+      // API가 느리거나 실패하면 내장 음성으로 즉시 폴백
+      return speakWithBrowserAndWait(
+        normalized,
+        gender === "male" ? "male" : "female",
+        voicePerson,
+        lang
+      );
     },
-    [gender, lang]
+    [gender, voicePerson, lang]
   );
 
   const stop = useCallback(() => {

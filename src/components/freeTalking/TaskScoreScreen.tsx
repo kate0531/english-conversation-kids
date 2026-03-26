@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { playClick, playPopup } from "@/lib/sounds";
 import CorrectCheck from "./CorrectCheck";
 import VoiceMicIcon from "@/components/VoiceMicIcon";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import CelebrationEffect from "./CelebrationEffect";
 
 interface Task {
   id: string;
@@ -29,6 +30,8 @@ export default function TaskScoreScreen({
   const [showPlusTen, setShowPlusTen] = useState(false);
   const [practicingTask, setPracticingTask] = useState<Task | null>(null);
   const [practiceSpoken, setPracticeSpoken] = useState(false);
+  const [showCelebrate, setShowCelebrate] = useState(false);
+  const celebrateTriggeredRef = useRef(false);
 
   const handleVoiceResult = useCallback((text: string) => {
     if (!text?.trim()) return;
@@ -62,8 +65,17 @@ export default function TaskScoreScreen({
 
   const allTasksCompleted = tasks.length > 0 && tasks.every((t) => t.completed);
 
+  useEffect(() => {
+    if (celebrateTriggeredRef.current) return;
+    celebrateTriggeredRef.current = true;
+    setShowCelebrate(true);
+    const t = setTimeout(() => setShowCelebrate(false), 2400);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-b from-rose-50 via-pink-50/80 to-rose-50/60 overflow-y-auto">
+      <CelebrationEffect show={showCelebrate} message="잘했어요!" />
       <header className="flex-shrink-0 sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-pink-200">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <button

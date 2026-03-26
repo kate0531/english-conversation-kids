@@ -124,13 +124,50 @@ export default function FreeTalkingMainScreen({
   const [activeVisualKeywords, setActiveVisualKeywords] = useState<string[]>(
     scenario.visualKeywords
   );
+  const [conversation, setConversation] = useState<FreeTalkingConversationTurn[]>(
+    scenario.conversation ?? []
+  );
+  const [generatedBgUrl, setGeneratedBgUrl] = useState<string | null>(null);
   useEffect(() => {
     setActiveVisualKeywords(scenario.visualKeywords);
+    setGeneratedBgUrl(null);
+    setConversation(scenario.conversation ?? []);
+    setCurrentTurnIndex(0);
   }, [scenario]);
 
-  const bgUrl = appendSig(getBackgroundImageUrl(activeVisualKeywords));
+  useEffect(() => {
+    if (scenario.backgroundImageUrl?.trim()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/free-talking/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: scenario.topic,
+            visualKeywords: scenario.visualKeywords,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { backgroundImageUrl?: string };
+        const u = typeof data.backgroundImageUrl === "string" ? data.backgroundImageUrl.trim() : "";
+        if (!cancelled && u) setGeneratedBgUrl(u);
+      } catch {
+        // 이미지 생성 실패 시 기존 키워드 배경 사용
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scenario.backgroundImageUrl, scenario.topic, scenario.visualKeywords]);
 
-  const conversation = scenario?.conversation ?? [];
+  const bgUrl = appendSig(
+    generatedBgUrl?.trim() || scenario.backgroundImageUrl?.trim()
+      ? (generatedBgUrl?.trim() || scenario.backgroundImageUrl?.trim()) as string
+      : getBackgroundImageUrl(activeVisualKeywords)
+  );
+
   const currentTurn = conversation[currentTurnIndex];
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsRetryToken, setTtsRetryToken] = useState(0);
@@ -159,19 +196,109 @@ export default function FreeTalkingMainScreen({
 
     onTurnComplete(answer);
 
-    // 사용자가 말한 내용에 해당하는 힌트 키워드(=대답 주제)로 다음 질문/화면 배경 매칭
-    setActiveVisualKeywords(
-      currentTurn.keywords && currentTurn.keywords.length > 0 ? currentTurn.keywords : scenario.visualKeywords
-    );
+    const answerKeywords = answer
+      .toLowerCase()
+      .replace(/[^a-z\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length >= 3)
+      .slice(0, 5);
+    setActiveVisualKeywords(answerKeywords.length ? answerKeywords : scenario.visualKeywords);
+
+    const nextIndex = currentTurnIndex + 1;
+    const nextAiTurn = conversation[nextIndex];
+    const nextUserTurn = conversation[nextIndex + 1];
+    const recentDialogue = conversation
+      .slice(0, currentTurnIndex + 1)
+      .map((turn) => {
+        if (turn.speaker === "ai") return `AI: ${turn.text ?? ""}`;
+        if (turn.turn === currentTurn?.turn) return `User: ${answer}`;
+        const uIdx = Math.floor(turn.turn / 2) - 1;
+        return `User: ${userAnswers[uIdx] ?? ""}`;
+      })
+      .join("\n");
+    const followUpPromise: Promise<
+      | {
+          questionEn: string;
+          questionKo?: string;
+          focusKeywords?: string[];
+          nextUserHint?: string;
+        }
+      | null
+    > = (async () => {
+      if (!nextAiTurn || nextAiTurn.speaker !== "ai" || !nextAiTurn.text?.trim()) return null;
+      try {
+        const res = await fetch("/api/free-talking/next-question", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            topic: scenario.topic,
+            situation: scenario.situation,
+            previousAiQuestion: conversation[currentTurnIndex - 1]?.text ?? "",
+            userAnswer: answer,
+            recentDialogue,
+            plannedNextQuestion: nextAiTurn.text,
+            plannedNextQuestionKo: nextAiTurn.koText ?? "",
+            nextUserHint: nextUserTurn?.hint ?? "",
+            nextUserKeywords: nextUserTurn?.keywords ?? [],
+          }),
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as {
+          questionEn?: string;
+          questionKo?: string;
+          focusKeywords?: string[];
+          nextUserHint?: string;
+        };
+        if (!data.questionEn?.trim()) return null;
+        return data as {
+          questionEn: string;
+          questionKo?: string;
+          focusKeywords?: string[];
+          nextUserHint?: string;
+        };
+      } catch {
+        return null;
+      }
+    })();
 
     let didAdvance = false;
-    const goNext = () => {
+    const goNext = async () => {
       // correction 완료/타임아웃 모두에서 한 번만 다음 턴으로 이동
       if (didAdvance) return;
       didAdvance = true;
       setIsCorrecting(false);
       setAnsweredWaiting(false);
-      const nextIndex = currentTurnIndex + 1;
+
+      const patched = await Promise.race([
+        followUpPromise,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]);
+      if (patched && nextAiTurn && nextAiTurn.speaker === "ai") {
+        setConversation((prev) => {
+          const cloned = [...prev];
+          const ai = cloned[nextIndex];
+          if (ai && ai.speaker === "ai") {
+            cloned[nextIndex] = {
+              ...ai,
+              text: patched.questionEn,
+              koText: patched.questionKo?.trim() || patched.questionEn,
+            };
+          }
+          const user = cloned[nextIndex + 1];
+          if (user && user.speaker === "user") {
+            cloned[nextIndex + 1] = {
+              ...user,
+              ...(patched.nextUserHint?.trim() ? { hint: patched.nextUserHint.trim() } : {}),
+              ...(patched.focusKeywords?.length ? { keywords: patched.focusKeywords } : {}),
+            };
+          }
+          return cloned;
+        });
+        if (patched.focusKeywords?.length) {
+          setActiveVisualKeywords(patched.focusKeywords);
+        }
+      }
+
       if (nextIndex >= conversation.length) {
         onAllComplete();
         return;
@@ -182,7 +309,7 @@ export default function FreeTalkingMainScreen({
     // correction API가 느려도 UX가 멈추지 않도록 max wait
     const maxWaitMs = 3000;
     const timer = setTimeout(() => {
-      goNext();
+      void goNext();
     }, maxWaitMs);
 
     void (async () => {
@@ -190,7 +317,10 @@ export default function FreeTalkingMainScreen({
         const res = await fetch("/api/free-talking/correct", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ scenario, userAnswers: nextUserAnswers }),
+          body: JSON.stringify({
+            scenario: { ...scenario, conversation },
+            userAnswers: nextUserAnswers,
+          }),
         });
         if (!res.ok) return;
         const data = (await res.json()) as {
@@ -205,7 +335,7 @@ export default function FreeTalkingMainScreen({
         // correction 실패해도 maxWait 기반으로 다음 진행
       } finally {
         clearTimeout(timer);
-        goNext();
+        void goNext();
       }
     })();
   }, [
@@ -218,6 +348,8 @@ export default function FreeTalkingMainScreen({
     onAllComplete,
     scenario,
     scenario.visualKeywords,
+    scenario.topic,
+    scenario.situation,
     userAnswers,
   ]);
 
