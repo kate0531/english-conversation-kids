@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react";
 import type { FreeTalkingSampleLine } from "@/types/freeTalking";
 import { playClick, playPopup } from "@/lib/sounds";
-import { playSampleConversationWithOpenAI } from "@/hooks/useTTS";
+import { playSampleConversation } from "@/hooks/useTTS";
 
 interface FreeTalkingPerfectSampleScreenProps {
   sampleConversation: FreeTalkingSampleLine[];
@@ -23,17 +23,13 @@ export default function FreeTalkingPerfectSampleScreen({
   onBack,
 }: FreeTalkingPerfectSampleScreenProps) {
   const [isPlayingSample, setIsPlayingSample] = useState(false);
-  const [ttsError, setTtsError] = useState<string | null>(null);
 
   const handlePlaySample = useCallback(() => {
     playClick();
-    setTtsError(null);
     setIsPlayingSample(true);
-    playSampleConversationWithOpenAI(
+    playSampleConversation(
       sampleConversation,
-      () => setIsPlayingSample(false),
-      () =>
-        setTtsError("음성(TTS) API를 사용할 수 없어요. OPENAI_API_KEY·Vercel 재배포를 확인해 주세요.")
+      () => setIsPlayingSample(false)
     );
   }, [sampleConversation]);
 
@@ -63,12 +59,6 @@ export default function FreeTalkingPerfectSampleScreen({
         {practiceSubtitle ? (
           <p className="text-violet-500/85 text-xs font-medium mb-4 text-center rounded-full bg-violet-100/70 py-1.5 px-3 mx-auto max-w-md">
             {practiceSubtitle}
-          </p>
-        ) : null}
-
-        {ttsError ? (
-          <p className="text-red-600 text-xs font-medium mb-3 text-center bg-red-50 border border-red-200 rounded-xl py-2 px-3">
-            {ttsError}
           </p>
         ) : null}
 

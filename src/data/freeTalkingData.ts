@@ -22,6 +22,7 @@ export const FREE_TALK_TOPICS = [
   "School Subjects",
   "Helping at Home",
   "Seasons & Nature",
+  "Challenge",
 ] as const;
 
 /** Hailey - School Life용 (캐주얼, 단정한 차림) */
@@ -321,6 +322,68 @@ export const FREE_TALK_SCENARIOS: Record<string, FreeTalkingScenario> = {
       { speaker: "ai", text: "Cool! How did you meet your friend?" },
       { speaker: "user", text: "We met on the first day of school last year." },
       { speaker: "ai", text: "Friends are the best! Keep being kind to each other." },
+    ],
+  },
+  Challenge: {
+    topic: "Challenge",
+    situation: "This is the advanced solo challenge mode with long follow-up conversation.",
+    partner: HAILEY_PROFILE,
+    visualKeywords: ["challenge", "conversation", "focus", "confidence"],
+    conversation: [
+      {
+        turn: 1,
+        speaker: "ai",
+        text: "How was your day today? Or tell me anything you want to share.",
+        koText: "오늘 하루 어땠어? 아니면 하고 싶은 말을 자유롭게 해줘.",
+      },
+      {
+        turn: 2,
+        speaker: "user",
+        expectedLevel: "long sentence",
+        hint: "Today I ..., and I want to talk about ...",
+        keywords: ["today", "share", "talk"],
+      },
+      {
+        turn: 3,
+        speaker: "ai",
+        text: "Great choice. Tell me one meaningful experience about it.",
+        koText: "좋은 선택이야. 그와 관련된 의미 있는 경험 하나를 말해줘.",
+      },
+      {
+        turn: 4,
+        speaker: "user",
+        expectedLevel: "long sentence",
+        hint: "One time, I practiced every day and improved a lot.",
+        keywords: ["practice", "improved", "every day"],
+      },
+      {
+        turn: 5,
+        speaker: "ai",
+        text: "Nice. What challenge did you face, and how did you solve it?",
+        koText: "좋아. 어떤 어려움이 있었고, 어떻게 해결했어?",
+      },
+      {
+        turn: 6,
+        speaker: "user",
+        expectedLevel: "long sentence",
+        hint: "I felt tired, but I made a schedule and kept going.",
+        keywords: ["tired", "schedule", "kept"],
+      },
+      {
+        turn: 7,
+        speaker: "ai",
+        text: "Impressive start. Let's continue with deeper follow-up questions.",
+        koText: "좋은 시작이야. 이제 더 깊은 후속 질문으로 이어가 보자.",
+      },
+    ],
+    perfectSampleConversation: [
+      { speaker: "ai", text: "How was your day today? Or tell me anything you want to share." },
+      { speaker: "user", text: "Today was busy, and I want to share my school project story." },
+      { speaker: "ai", text: "Great choice. Tell me one meaningful experience about it." },
+      { speaker: "user", text: "I practiced every day, and that helped me improve a lot." },
+      { speaker: "ai", text: "Nice. What challenge did you face, and how did you solve it?" },
+      { speaker: "user", text: "I was tired sometimes, so I made a weekly schedule." },
+      { speaker: "ai", text: "Impressive start. Let's continue with deeper follow-up questions." },
     ],
   },
 };

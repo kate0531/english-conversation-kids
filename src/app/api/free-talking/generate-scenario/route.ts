@@ -123,7 +123,7 @@ function normalizeScenario(raw: RawGenerated): FreeTalkingScenario | null {
     partner: { name, role, personality, gender: "female" },
     visualKeywords,
     conversation: conv,
-    perfectSampleConversation: samples.slice(0, 14),
+    perfectSampleConversation: samples.slice(0, 30),
   };
 }
 
@@ -140,6 +140,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "topic required" }, { status: 400 });
     }
 
+    const isChallenge = topic.toLowerCase() === "challenge";
+    const userTurnCount = isChallenge ? 10 : 7;
+    const totalItems = userTurnCount * 2 + 1;
+
     const system: ChatMsg = {
       role: "system",
       content: `You design English free-talking lessons for Korean elementary students (ages 8–12).
@@ -149,13 +153,20 @@ Output ONLY valid JSON (no markdown). The JSON must have:
 - "partner": { "name": "Hailey", "role": "classmate", "personality": "friendly and cheerful", "gender": "female" }
 - "visualKeywords": array of 3–5 short English nouns for the setting (for subtitles context)
 
-- "conversation": exactly 7 items, turns 1..7 alternating:
-  - odd (1,3,5,7): "speaker":"ai", "text" (simple English question), "koText" (Korean translation)
-  - even (2,4,6): "speaker":"user", "expectedLevel" (e.g. "short sentence"), "hint" (English example phrase), "keywords" (2–5 English words)
-- "perfectSampleConversation": exactly 7 objects alternating ai then user: natural simple English for each line matching the conversation flow
+- "conversation": exactly ${totalItems} items, turns 1..${totalItems}, alternating:
+  - odd turns except final odd turn: "speaker":"ai", "text" (simple English follow-up question), "koText" (Korean translation)
+  - even turns: "speaker":"user", "expectedLevel" (e.g. "short sentence"), "hint" (English example phrase), "keywords" (2–5 English words)
+  - final turn ${totalItems}: "speaker":"ai" and this MUST be a friendly closing message, NOT a question
+- "perfectSampleConversation": exactly ${totalItems} objects alternating ai then user and ending with ai closing line
 
 Use CEFR A1–A2 English only for AI lines.`,
     };
+    const challengeRule = isChallenge
+      ? `\nAdditional Challenge rule:
+- Turn 1 AI line MUST invite free talking about today's day or anything the student wants to share.
+- Example style: "How was your day today? Or tell me anything you want to share."`
+      : "";
+    system.content += challengeRule;
 
     const user: ChatMsg = {
       role: "user",

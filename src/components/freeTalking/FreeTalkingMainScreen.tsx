@@ -99,6 +99,8 @@ export default function FreeTalkingMainScreen({
   onAllComplete,
   onBack,
 }: FreeTalkingMainScreenProps) {
+  const isChallengeTopic = /challenge/i.test(scenario.topic);
+  const maxRecordingMs = isChallengeTopic ? 60000 : 15000;
   const [showCountdown, setShowCountdown] = useState(true);
   // TTS 오디오가 정책 때문에 재생되지 않을 수 있어 기본값을 En으로 두어 질문 문장을 바로 보여줌
   const [subtitleMode, setSubtitleMode] = useState<SubtitleMode>("en");
@@ -377,6 +379,7 @@ export default function FreeTalkingMainScreen({
   const { isListening, start, stop, sttError, clearSttError, interimText, isProcessing } = useSpeechRecognition({
     lang: "en-US",
     onResult: handleVoiceResult,
+    maxRecordingMs,
   });
 
   // AI 턴: TTS API 재생이 끝난 뒤에만 띵동·다음 턴 (실패 시 진행 안 함 — 내장 음성 폴백 없음)

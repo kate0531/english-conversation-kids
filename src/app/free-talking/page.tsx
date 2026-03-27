@@ -74,7 +74,14 @@ function fallbackKeywords(topic: string): string[] {
     .slice(0, 4);
 }
 
-function ensureSevenTurnsWithClosing(s: FreeTalkingScenario): FreeTalkingScenario {
+function isChallengeTopic(topic: string): boolean {
+  return topic.trim().toLowerCase() === "challenge";
+}
+
+function ensureTurnsWithClosing(
+  s: FreeTalkingScenario,
+  targetUserTurns: number
+): FreeTalkingScenario {
   const pairs: Array<{
     qEn: string;
     qKo: string;
@@ -115,7 +122,7 @@ function ensureSevenTurnsWithClosing(s: FreeTalkingScenario): FreeTalkingScenari
     "그 후에 기분이 어때?",
   ];
 
-  while (pairs.length < 7) {
+  while (pairs.length < targetUserTurns) {
     const idx = pairs.length;
     pairs.push({
       qEn: genericQ[idx] ?? "Can you tell me more?",
@@ -125,7 +132,16 @@ function ensureSevenTurnsWithClosing(s: FreeTalkingScenario): FreeTalkingScenari
     });
   }
 
-  const normalizedPairs = pairs.slice(0, 7);
+  const normalizedPairs = pairs.slice(0, targetUserTurns);
+  if (isChallengeTopic(s.topic) && normalizedPairs.length > 0) {
+    normalizedPairs[0] = {
+      ...normalizedPairs[0],
+      qEn: "How was your day today? Or tell me anything you want to share.",
+      qKo: "오늘 하루 어땠어? 아니면 하고 싶은 말을 자유롭게 해줘.",
+      hint: "Today I ..., and I want to talk about ...",
+      keywords: ["today", "share", "talk"],
+    };
+  }
   const normalizedConversation: FreeTalkingConversationTurn[] = [];
   const normalizedSample: FreeTalkingSampleLine[] = [];
 
@@ -148,15 +164,22 @@ function ensureSevenTurnsWithClosing(s: FreeTalkingScenario): FreeTalkingScenari
     normalizedSample.push({ speaker: "user", text: p.hint.split("/")[0]?.trim() || p.hint });
   }
 
+  const closingTextEn = isChallengeTopic(s.topic)
+    ? `Great challenge today. You handled a long conversation really well.`
+    : `Thanks for sharing about ${s.topic}. You did great today.`;
+  const closingTextKo = isChallengeTopic(s.topic)
+    ? "오늘 챌린지 정말 잘했어. 긴 대화를 아주 잘 이어 갔어."
+    : `${s.topic}에 대해 이야기해줘서 고마워. 오늘 정말 잘했어.`;
+
   normalizedConversation.push({
     turn: turnNo,
     speaker: "ai",
-    text: `Thanks for sharing about ${s.topic}. You did great today.`,
-    koText: `${s.topic}에 대해 이야기해줘서 고마워. 오늘 정말 잘했어.`,
+    text: closingTextEn,
+    koText: closingTextKo,
   });
   normalizedSample.push({
     speaker: "ai",
-    text: `Thanks for sharing about ${s.topic}. You did great today.`,
+    text: closingTextEn,
   });
 
   return {
@@ -191,18 +214,21 @@ export default function FreeTalkingPage() {
       if (genRes.ok) {
         const data = (await genRes.json()) as { scenario?: FreeTalkingScenario };
         if (data.scenario?.conversation?.length) {
-          setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(data.scenario)));
+          const targetUserTurns = isChallengeTopic(data.scenario.topic) ? 10 : 7;
+          setScenario(applyRandomPartnerPhoto(ensureTurnsWithClosing(data.scenario, targetUserTurns)));
           setStep("main");
           return;
         }
       }
       const generated = await buildThreeTurnScenario(topic);
       const s = generated ?? getScenarioForTopic(topic);
-      setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(s)));
+      const targetUserTurns = isChallengeTopic(s.topic) ? 10 : 7;
+      setScenario(applyRandomPartnerPhoto(ensureTurnsWithClosing(s, targetUserTurns)));
       setStep("main");
     } catch {
       const fallback = getScenarioForTopic(topic);
-      setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(fallback)));
+      const targetUserTurns = isChallengeTopic(fallback.topic) ? 10 : 7;
+      setScenario(applyRandomPartnerPhoto(ensureTurnsWithClosing(fallback, targetUserTurns)));
       setStep("main");
     } finally {
       setIsBuildingScenario(false);

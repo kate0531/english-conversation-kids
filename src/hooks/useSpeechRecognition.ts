@@ -51,7 +51,7 @@ function audioFilenameForBlob(blob: Blob): string {
   return "audio.webm";
 }
 
-const MAX_RECORDING_MS = 9000;
+const DEFAULT_MAX_RECORDING_MS = 15000;
 
 /**
  * 음성 인식: Whisper(/api/stt)로 최종 확정.
@@ -63,6 +63,7 @@ export function useSpeechRecognition(options?: {
   onResult?: (text: string) => void;
   onInterim?: (text: string) => void;
   onStream?: (stream: MediaStream) => void;
+  maxRecordingMs?: number;
 }) {
   const [isListening, setIsListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -208,8 +209,8 @@ export function useSpeechRecognition(options?: {
           setIsListening(false);
         }
       }
-    }, MAX_RECORDING_MS);
-  }, [stopStream]);
+    }, options?.maxRecordingMs ?? DEFAULT_MAX_RECORDING_MS);
+  }, [stopStream, options?.maxRecordingMs]);
 
   const startMediaRecorder = useCallback(async (): Promise<void> => {
     setSttError(null);
