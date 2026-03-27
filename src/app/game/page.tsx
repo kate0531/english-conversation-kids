@@ -8,12 +8,10 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import {
   playBuzzer,
   playClick,
-  playCuteTick,
   playDefeatBlast,
   playExplosion,
   playGoSignal,
   playLaserPulse,
-  playTick,
   playTransition,
   playVictoryBlast,
   startBombBgm,
@@ -107,29 +105,9 @@ function BombBuddy({ mood }: { mood: BombMood }) {
         className="relative w-28 h-28 rounded-full border-4 border-slate-800 bg-gradient-to-b from-slate-500 via-slate-700 to-slate-900 shadow-[inset_0_12px_20px_rgba(255,255,255,0.22),0_12px_20px_rgba(0,0,0,0.22)]"
         style={active ? { animation: "bomb-shake 0.45s infinite" } : undefined}
       >
-        <div className="absolute top-4 left-6 w-6 h-6 rounded-full bg-white flex items-center justify-center">
-          <span className={`rounded-full bg-slate-900 ${fail ? "w-2 h-3" : "w-2.5 h-2.5"}`} />
-        </div>
-        <div className="absolute top-4 right-6 w-6 h-6 rounded-full bg-white flex items-center justify-center">
-          <span className={`rounded-full bg-slate-900 ${fail ? "w-2 h-3" : "w-2.5 h-2.5"}`} />
-        </div>
-        {fail ? (
-          <>
-            <div className="absolute top-2.5 left-5 text-xs text-white -rotate-12">∧</div>
-            <div className="absolute top-2.5 right-5 text-xs text-white rotate-12">∧</div>
-          </>
-        ) : null}
-        <div className="absolute top-12 left-5 w-3 h-2 rounded-full bg-rose-300/70" />
-        <div className="absolute top-12 right-5 w-3 h-2 rounded-full bg-rose-300/70" />
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center">
-          {success ? (
-            <div className="w-10 h-5 border-b-4 border-l-2 border-r-2 border-white rounded-b-full" />
-          ) : fail ? (
-            <div className="w-5 h-5 border-4 border-white rounded-full" />
-          ) : (
-            <div className="w-10 h-4 border-b-4 border-white rounded-b-full" />
-          )}
-        </div>
+        <div className="absolute left-1/2 -translate-x-1/2 top-7 w-14 h-6 rounded-full bg-white/20 blur-[1px]" />
+        <div className="absolute left-1/2 -translate-x-1/2 top-10 w-7 h-7 rounded-full border-4 border-white/80 shadow-inner" />
+        <div className="absolute left-1/2 -translate-x-1/2 top-[2.9rem] w-2.5 h-2.5 rounded-full bg-white" />
         <div className="absolute -left-3 bottom-8 text-lg">🫶</div>
         <div className="absolute -right-3 bottom-8 text-lg">{success ? "🎀" : fail ? "😵" : "🎀"}</div>
       </div>
@@ -240,7 +218,6 @@ export default function GamePage() {
       start();
       return;
     }
-    playTick();
     const timer = window.setTimeout(() => setBombCountdown((prev) => prev - 1), 850);
     return () => window.clearTimeout(timer);
   }, [bombPhase, bombCountdown, bombMission.seconds, start]);
@@ -255,7 +232,6 @@ export default function GamePage() {
       start();
       return;
     }
-    playCuteTick();
     const timer = window.setTimeout(() => setDuelCountdown((prev) => prev - 1), 850);
     return () => window.clearTimeout(timer);
   }, [duelPhase, duelCountdown, duelMission.seconds, start]);
@@ -270,7 +246,6 @@ export default function GamePage() {
       return;
     }
     const timer = window.setTimeout(() => {
-      playTick();
       setBombTimeLeft((prev) => prev - 1);
     }, 1000);
     return () => window.clearTimeout(timer);
@@ -285,7 +260,6 @@ export default function GamePage() {
       return;
     }
     const timer = window.setTimeout(() => {
-      playCuteTick();
       setDuelTimeLeft((prev) => prev - 1);
     }, 1000);
     return () => window.clearTimeout(timer);

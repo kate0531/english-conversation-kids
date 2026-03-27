@@ -509,52 +509,26 @@ function runMachinePulse(
   osc.stop(at + duration);
 }
 
-function runMachineHat(ctx: AudioContext, at: number): void {
-  const duration = 0.045;
-  const bufferSize = Math.floor(ctx.sampleRate * duration);
-  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-  const output = buffer.getChannelData(0);
-  for (let i = 0; i < bufferSize; i += 1) {
-    const decay = 1 - i / bufferSize;
-    output[i] = (Math.random() * 2 - 1) * decay;
-  }
-  const src = ctx.createBufferSource();
-  const band = ctx.createBiquadFilter();
-  const gain = ctx.createGain();
-  src.buffer = buffer;
-  band.type = "highpass";
-  band.frequency.setValueAtTime(4800, at);
-  src.connect(band);
-  band.connect(gain);
-  gain.connect(ctx.destination);
-  gain.gain.setValueAtTime(0.001, at);
-  gain.gain.linearRampToValueAtTime(0.03, at + 0.003);
-  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
-  src.start(at);
-  src.stop(at + duration);
-}
-
 function runDuelMachineStep(ctx: AudioContext, step: number): void {
   const at = ctx.currentTime + 0.005;
-  const bassPattern = [110, 0, 98, 0, 123, 0, 92, 0];
-  const leadPattern = [660, 0, 740, 620, 0, 700, 0, 780];
+  const bassPattern = [196, 0, 220, 0, 196, 0, 247, 0];
+  const leadPattern = [659, 784, 880, 784, 740, 659, 784, 988];
   const idx = step % bassPattern.length;
   const bass = bassPattern[idx];
   const lead = leadPattern[idx];
 
-  if (bass > 0) runMachinePulse(ctx, bass, 0.13, "square", 0.05, at);
-  if (lead > 0) runMachinePulse(ctx, lead, 0.09, "triangle", 0.035, at + 0.01);
-  runMachineHat(ctx, at + 0.02);
+  if (bass > 0) runMachinePulse(ctx, bass, 0.12, "sine", 0.018, at);
+  if (lead > 0) runMachinePulse(ctx, lead, 0.085, "triangle", 0.015, at + 0.015);
 }
 
 function startMachineHum(ctx: AudioContext): void {
   if (duelMachineHumOsc || duelMachineHumGain) return;
   duelMachineHumOsc = ctx.createOscillator();
   duelMachineHumGain = ctx.createGain();
-  duelMachineHumOsc.type = "sawtooth";
-  duelMachineHumOsc.frequency.setValueAtTime(58, ctx.currentTime);
+  duelMachineHumOsc.type = "sine";
+  duelMachineHumOsc.frequency.setValueAtTime(220, ctx.currentTime);
   duelMachineHumGain.gain.setValueAtTime(0.001, ctx.currentTime);
-  duelMachineHumGain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 0.08);
+  duelMachineHumGain.gain.linearRampToValueAtTime(0.006, ctx.currentTime + 0.08);
   duelMachineHumOsc.connect(duelMachineHumGain);
   duelMachineHumGain.connect(ctx.destination);
   duelMachineHumOsc.start(ctx.currentTime);
@@ -591,7 +565,7 @@ export function startDuelMachineBgm(): void {
       duelMachineInterval = setInterval(() => {
         runDuelMachineStep(ctx, duelMachineStep);
         duelMachineStep += 1;
-      }, 220);
+      }, 260);
     };
 
     if (ctx.state === "suspended") {
@@ -630,11 +604,12 @@ function runBombTone(
   const gain = ctx.createGain();
   osc.type = type;
   osc.frequency.setValueAtTime(frequency, at);
-  osc.frequency.linearRampToValueAtTime(frequency * 0.92, at + duration);
+  osc.frequency.linearRampToValueAtTime(frequency * 1.08, at + duration * 0.5);
+  osc.frequency.linearRampToValueAtTime(frequency, at + duration);
   osc.connect(gain);
   gain.connect(ctx.destination);
   gain.gain.setValueAtTime(0.001, at);
-  gain.gain.linearRampToValueAtTime(volume, at + 0.02);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
   osc.start(at);
   osc.stop(at + duration);
@@ -642,23 +617,23 @@ function runBombTone(
 
 function runBombLoopStep(ctx: AudioContext, step: number): void {
   const at = ctx.currentTime + 0.005;
-  const bassPattern = [196, 0, 185, 0, 208, 0, 174, 0];
-  const bellPattern = [784, 0, 880, 0, 784, 0, 988, 0];
-  const idx = step % bassPattern.length;
-  const bass = bassPattern[idx];
-  const bell = bellPattern[idx];
-  if (bass > 0) runBombTone(ctx, bass, 0.2, "triangle", 0.045, at);
-  if (bell > 0) runBombTone(ctx, bell, 0.12, "sine", 0.03, at + 0.04);
+  const popPattern = [523, 659, 784, 659, 880, 784, 659, 523];
+  const pluckPattern = [1046, 0, 988, 1175, 0, 988, 1318, 0];
+  const idx = step % popPattern.length;
+  const pop = popPattern[idx];
+  const pluck = pluckPattern[idx];
+  runBombTone(ctx, pop, 0.14, "triangle", 0.05, at);
+  if (pluck > 0) runBombTone(ctx, pluck, 0.09, "sine", 0.035, at + 0.03);
 }
 
 function startBombPad(ctx: AudioContext): void {
   if (bombPadOsc || bombPadGain) return;
   bombPadOsc = ctx.createOscillator();
   bombPadGain = ctx.createGain();
-  bombPadOsc.type = "sine";
-  bombPadOsc.frequency.setValueAtTime(146, ctx.currentTime);
+  bombPadOsc.type = "triangle";
+  bombPadOsc.frequency.setValueAtTime(262, ctx.currentTime);
   bombPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
-  bombPadGain.gain.linearRampToValueAtTime(0.015, ctx.currentTime + 0.08);
+  bombPadGain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.08);
   bombPadOsc.connect(bombPadGain);
   bombPadGain.connect(ctx.destination);
   bombPadOsc.start(ctx.currentTime);
@@ -679,7 +654,7 @@ function stopBombPad(ctx: AudioContext): void {
   }
 }
 
-/** 폭탄 돌리기용 긴장+귀여운 루프 배경음 시작 */
+/** 폭탄 돌리기용 통통 튀는 루프 배경음 시작 */
 export function startBombBgm(): void {
   try {
     if (bombBgmInterval) return;
@@ -695,7 +670,7 @@ export function startBombBgm(): void {
       bombBgmInterval = setInterval(() => {
         runBombLoopStep(ctx, bombBgmStep);
         bombBgmStep += 1;
-      }, 280);
+      }, 240);
     };
 
     if (ctx.state === "suspended") {
