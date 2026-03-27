@@ -14,9 +14,7 @@ import {
   playLaserPulse,
   playTransition,
   playVictoryBlast,
-  startBombBgm,
   startDuelMachineBgm,
-  stopBombBgm,
   stopDuelMachineBgm,
 } from "@/lib/sounds";
 
@@ -341,19 +339,13 @@ export default function GamePage() {
   }, [duelImpact]);
 
   useEffect(() => {
-    if (mode === "duel") {
-      stopBombBgm();
+    if (mode === "duel" || mode === "bomb") {
       startDuelMachineBgm();
-    } else if (mode === "bomb") {
-      stopDuelMachineBgm();
-      startBombBgm();
     } else {
       stopDuelMachineBgm();
-      stopBombBgm();
     }
     return () => {
       stopDuelMachineBgm();
-      stopBombBgm();
     };
   }, [mode]);
 
@@ -362,7 +354,6 @@ export default function GamePage() {
       activeRoundRef.current = null;
       stop();
       stopDuelMachineBgm();
-      stopBombBgm();
     };
   }, [stop]);
 
