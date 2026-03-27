@@ -98,7 +98,7 @@ function BombBuddy({ mood }: { mood: BombMood }) {
           className="absolute -top-4 left-1/2 -translate-x-1/2 text-sm"
           style={active ? { animation: "sparkle 0.9s ease-out infinite" } : undefined}
         >
-          {success ? "🎉" : fail ? "⚠️" : "✨"}
+          <span className={`inline-block w-2.5 h-2.5 rounded-full ${success ? "bg-lime-300" : fail ? "bg-amber-300" : "bg-white/80"}`} />
         </span>
       </div>
       <div
@@ -106,10 +106,12 @@ function BombBuddy({ mood }: { mood: BombMood }) {
         style={active ? { animation: "bomb-shake 0.45s infinite" } : undefined}
       >
         <div className="absolute left-1/2 -translate-x-1/2 top-7 w-14 h-6 rounded-full bg-white/20 blur-[1px]" />
-        <div className="absolute left-1/2 -translate-x-1/2 top-10 w-7 h-7 rounded-full border-4 border-white/80 shadow-inner" />
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 top-10 w-7 h-7 rounded-full border-4 shadow-inner ${
+            success ? "border-lime-200/90" : fail ? "border-amber-200/90" : "border-white/80"
+          }`}
+        />
         <div className="absolute left-1/2 -translate-x-1/2 top-[2.9rem] w-2.5 h-2.5 rounded-full bg-white" />
-        <div className="absolute -left-3 bottom-8 text-lg">🫶</div>
-        <div className="absolute -right-3 bottom-8 text-lg">{success ? "🎀" : fail ? "😵" : "🎀"}</div>
       </div>
     </div>
   );
@@ -487,13 +489,6 @@ export default function GamePage() {
               >
                 코너 선택으로
               </button>
-            </div>
-
-            <div className="flex items-center justify-center gap-2 text-xl">
-              <span>🧸</span>
-              <span>🎈</span>
-              <span>💣</span>
-              <span>✨</span>
             </div>
 
             <div className="rounded-2xl border border-pink-200 bg-white/80 p-4">

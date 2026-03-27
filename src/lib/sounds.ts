@@ -511,24 +511,24 @@ function runMachinePulse(
 
 function runDuelMachineStep(ctx: AudioContext, step: number): void {
   const at = ctx.currentTime + 0.005;
-  const bassPattern = [196, 0, 220, 0, 196, 0, 247, 0];
-  const leadPattern = [659, 784, 880, 784, 740, 659, 784, 988];
-  const idx = step % bassPattern.length;
-  const bass = bassPattern[idx];
-  const lead = leadPattern[idx];
+  const bouncePattern = [523, 659, 784, 659, 880, 784, 659, 988];
+  const sparklePattern = [1046, 0, 1175, 0, 1318, 0, 1175, 0];
+  const idx = step % bouncePattern.length;
+  const bounce = bouncePattern[idx];
+  const sparkle = sparklePattern[idx];
 
-  if (bass > 0) runMachinePulse(ctx, bass, 0.12, "sine", 0.018, at);
-  if (lead > 0) runMachinePulse(ctx, lead, 0.085, "triangle", 0.015, at + 0.015);
+  runMachinePulse(ctx, bounce, 0.09, "triangle", 0.012, at);
+  if (sparkle > 0) runMachinePulse(ctx, sparkle, 0.06, "sine", 0.008, at + 0.02);
 }
 
 function startMachineHum(ctx: AudioContext): void {
   if (duelMachineHumOsc || duelMachineHumGain) return;
   duelMachineHumOsc = ctx.createOscillator();
   duelMachineHumGain = ctx.createGain();
-  duelMachineHumOsc.type = "sine";
-  duelMachineHumOsc.frequency.setValueAtTime(220, ctx.currentTime);
+  duelMachineHumOsc.type = "triangle";
+  duelMachineHumOsc.frequency.setValueAtTime(392, ctx.currentTime);
   duelMachineHumGain.gain.setValueAtTime(0.001, ctx.currentTime);
-  duelMachineHumGain.gain.linearRampToValueAtTime(0.006, ctx.currentTime + 0.08);
+  duelMachineHumGain.gain.linearRampToValueAtTime(0.0025, ctx.currentTime + 0.08);
   duelMachineHumOsc.connect(duelMachineHumGain);
   duelMachineHumGain.connect(ctx.destination);
   duelMachineHumOsc.start(ctx.currentTime);
@@ -565,7 +565,7 @@ export function startDuelMachineBgm(): void {
       duelMachineInterval = setInterval(() => {
         runDuelMachineStep(ctx, duelMachineStep);
         duelMachineStep += 1;
-      }, 260);
+      }, 240);
     };
 
     if (ctx.state === "suspended") {
