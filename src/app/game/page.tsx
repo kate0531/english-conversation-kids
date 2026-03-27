@@ -16,6 +16,10 @@ import {
   playTick,
   playTransition,
   playVictoryBlast,
+  startBombBgm,
+  startDuelMachineBgm,
+  stopBombBgm,
+  stopDuelMachineBgm,
 } from "@/lib/sounds";
 
 type ScreenMode = "menu" | "bomb" | "duel";
@@ -87,9 +91,9 @@ function BombBuddy({ mood }: { mood: BombMood }) {
   const fail = mood === "fail";
   return (
     <div className="flex flex-col items-center justify-center select-none">
-      <div className="relative w-8 h-8 mb-1">
+      <div className="relative w-10 h-9 mb-1">
         <div
-          className="absolute left-1/2 -translate-x-1/2 -top-2 w-1 h-3 rounded-full bg-amber-600 origin-bottom"
+          className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-1.5 h-3.5 rounded-full bg-amber-700 origin-bottom"
           style={active ? { animation: "bomb-shake 0.5s infinite" } : undefined}
         />
         <span
@@ -100,32 +104,34 @@ function BombBuddy({ mood }: { mood: BombMood }) {
         </span>
       </div>
       <div
-        className="relative w-28 h-28 rounded-full border-4 border-gray-900 bg-gradient-to-b from-gray-500 via-gray-700 to-gray-900 shadow-[inset_0_8px_20px_rgba(255,255,255,0.25),0_10px_18px_rgba(0,0,0,0.22)]"
+        className="relative w-28 h-28 rounded-full border-4 border-slate-800 bg-gradient-to-b from-slate-500 via-slate-700 to-slate-900 shadow-[inset_0_12px_20px_rgba(255,255,255,0.22),0_12px_20px_rgba(0,0,0,0.22)]"
         style={active ? { animation: "bomb-shake 0.45s infinite" } : undefined}
       >
-        <div className="absolute top-5 left-6 w-5 h-5 rounded-full bg-white flex items-center justify-center">
-          <span className="w-2.5 h-2.5 rounded-full bg-slate-900" />
+        <div className="absolute top-4 left-6 w-6 h-6 rounded-full bg-white flex items-center justify-center">
+          <span className={`rounded-full bg-slate-900 ${fail ? "w-2 h-3" : "w-2.5 h-2.5"}`} />
         </div>
-        <div className="absolute top-5 right-6 w-5 h-5 rounded-full bg-white flex items-center justify-center">
-          <span className="w-2.5 h-2.5 rounded-full bg-slate-900" />
+        <div className="absolute top-4 right-6 w-6 h-6 rounded-full bg-white flex items-center justify-center">
+          <span className={`rounded-full bg-slate-900 ${fail ? "w-2 h-3" : "w-2.5 h-2.5"}`} />
         </div>
         {fail ? (
           <>
-            <div className="absolute top-3 left-5 text-xs text-white -rotate-12">⌒</div>
-            <div className="absolute top-3 right-5 text-xs text-white rotate-12">⌒</div>
+            <div className="absolute top-2.5 left-5 text-xs text-white -rotate-12">∧</div>
+            <div className="absolute top-2.5 right-5 text-xs text-white rotate-12">∧</div>
           </>
         ) : null}
-        <div className="absolute top-10 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-rose-300/80" />
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2">
+        <div className="absolute top-12 left-5 w-3 h-2 rounded-full bg-rose-300/70" />
+        <div className="absolute top-12 right-5 w-3 h-2 rounded-full bg-rose-300/70" />
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center justify-center">
           {success ? (
             <div className="w-10 h-5 border-b-4 border-l-2 border-r-2 border-white rounded-b-full" />
           ) : fail ? (
             <div className="w-5 h-5 border-4 border-white rounded-full" />
           ) : (
-            <div className="w-10 h-5 border-b-4 border-white rounded-b-full" />
+            <div className="w-10 h-4 border-b-4 border-white rounded-b-full" />
           )}
         </div>
-        <div className="absolute -right-2 bottom-4 text-xl">{success ? "💗" : fail ? "😵" : "💗"}</div>
+        <div className="absolute -left-3 bottom-8 text-lg">🫶</div>
+        <div className="absolute -right-3 bottom-8 text-lg">{success ? "🎀" : fail ? "😵" : "🎀"}</div>
       </div>
     </div>
   );
@@ -308,13 +314,7 @@ export default function GamePage() {
     setBombDetectedSentences(sentenceCount);
     setBombDetectedWords(wordCount);
     setBombSuccess(success);
-    setBombMessage(
-      success
-        ? sentenceCount >= bombMission.targetSentences
-          ? "완전 성공! 폭탄 터지기 전에 말하기 미션 클리어!"
-          : "좋아요! AI가 발화를 들었어요. 이 게임은 말하면 성공!"
-        : "이번에는 소리가 잘 안 잡혔어요. 더 크게, 또렷하게 한 번 더!"
-    );
+    setBombMessage(success ? "" : "이번에는 소리가 잘 안 잡혔어요. 더 크게, 또렷하게 한 번 더!");
     setBombPhase("result");
     if (success) playTransition();
     else playBuzzer();
@@ -365,9 +365,28 @@ export default function GamePage() {
   }, [duelImpact]);
 
   useEffect(() => {
+    if (mode === "duel") {
+      stopBombBgm();
+      startDuelMachineBgm();
+    } else if (mode === "bomb") {
+      stopDuelMachineBgm();
+      startBombBgm();
+    } else {
+      stopDuelMachineBgm();
+      stopBombBgm();
+    }
+    return () => {
+      stopDuelMachineBgm();
+      stopBombBgm();
+    };
+  }, [mode]);
+
+  useEffect(() => {
     return () => {
       activeRoundRef.current = null;
       stop();
+      stopDuelMachineBgm();
+      stopBombBgm();
     };
   }, [stop]);
 
@@ -407,6 +426,11 @@ export default function GamePage() {
           0% { opacity: 0; transform: translateY(10px) scale(0.65); }
           30% { opacity: 1; transform: translateY(-10px) scale(1.1); }
           100% { opacity: 0; transform: translateY(-58px) scale(1.55); }
+        }
+        @keyframes confetti-drop {
+          0% { transform: translateY(-20px) rotate(0deg); opacity: 0; }
+          10% { opacity: 1; }
+          100% { transform: translateY(240px) rotate(620deg); opacity: 0; }
         }
       `}</style>
 
@@ -545,17 +569,42 @@ export default function GamePage() {
             )}
 
             {bombPhase === "result" && (
-              <div className="rounded-2xl bg-white/90 border border-pink-200 p-4 space-y-2">
+              <div className="relative overflow-hidden rounded-2xl bg-white/90 border border-pink-200 p-4 space-y-2">
+                {bombSuccess && (
+                  <div className="absolute inset-0 pointer-events-none">
+                    {Array.from({ length: 22 }).map((_, i) => (
+                      <span
+                        key={`bomb-confetti-${i}`}
+                        className="absolute w-2.5 h-4 rounded-sm"
+                        style={{
+                          left: `${(i * 13 + 9) % 100}%`,
+                          top: "-12px",
+                          background:
+                            i % 5 === 0
+                              ? "#fb7185"
+                              : i % 5 === 1
+                              ? "#facc15"
+                              : i % 5 === 2
+                              ? "#22c55e"
+                              : i % 5 === 3
+                              ? "#38bdf8"
+                              : "#a78bfa",
+                          animation: `confetti-drop ${1.2 + (i % 5) * 0.25}s ease-out ${i * 0.04}s`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center justify-center pb-1">
                   <BombBuddy mood={bombSuccess ? "success" : "fail"} />
                 </div>
                 <p className={`text-lg font-bold ${bombSuccess ? "text-emerald-500" : "text-amber-500"}`}>
                   {bombSuccess ? "PASS!" : "다시 한 번!"}
                 </p>
-                <p className="text-sm text-gray-700">{bombMessage}</p>
-                <p className="text-sm text-gray-600">
-                  인식 결과: {bombDetectedSentences}문장 · {bombDetectedWords}단어
-                </p>
+                {!bombSuccess ? <p className="text-sm text-gray-700">{bombMessage}</p> : null}
+                {!bombSuccess ? (
+                  <p className="text-sm text-gray-600">인식 결과: {bombDetectedSentences}문장 · {bombDetectedWords}단어</p>
+                ) : null}
                 <button
                   type="button"
                   onClick={beginBombRound}

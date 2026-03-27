@@ -477,3 +477,247 @@ export function playDefeatBlast(): void {
     /* 무시 */
   }
 }
+
+let duelMachineInterval: ReturnType<typeof setInterval> | null = null;
+let duelMachineStep = 0;
+let duelMachineHumOsc: OscillatorNode | null = null;
+let duelMachineHumGain: GainNode | null = null;
+let bombBgmInterval: ReturnType<typeof setInterval> | null = null;
+let bombBgmStep = 0;
+let bombPadOsc: OscillatorNode | null = null;
+let bombPadGain: GainNode | null = null;
+
+function runMachinePulse(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(40, frequency * 0.76), at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runMachineHat(ctx: AudioContext, at: number): void {
+  const duration = 0.045;
+  const bufferSize = Math.floor(ctx.sampleRate * duration);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i += 1) {
+    const decay = 1 - i / bufferSize;
+    output[i] = (Math.random() * 2 - 1) * decay;
+  }
+  const src = ctx.createBufferSource();
+  const band = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  src.buffer = buffer;
+  band.type = "highpass";
+  band.frequency.setValueAtTime(4800, at);
+  src.connect(band);
+  band.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(0.03, at + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  src.start(at);
+  src.stop(at + duration);
+}
+
+function runDuelMachineStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  const bassPattern = [110, 0, 98, 0, 123, 0, 92, 0];
+  const leadPattern = [660, 0, 740, 620, 0, 700, 0, 780];
+  const idx = step % bassPattern.length;
+  const bass = bassPattern[idx];
+  const lead = leadPattern[idx];
+
+  if (bass > 0) runMachinePulse(ctx, bass, 0.13, "square", 0.05, at);
+  if (lead > 0) runMachinePulse(ctx, lead, 0.09, "triangle", 0.035, at + 0.01);
+  runMachineHat(ctx, at + 0.02);
+}
+
+function startMachineHum(ctx: AudioContext): void {
+  if (duelMachineHumOsc || duelMachineHumGain) return;
+  duelMachineHumOsc = ctx.createOscillator();
+  duelMachineHumGain = ctx.createGain();
+  duelMachineHumOsc.type = "sawtooth";
+  duelMachineHumOsc.frequency.setValueAtTime(58, ctx.currentTime);
+  duelMachineHumGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  duelMachineHumGain.gain.linearRampToValueAtTime(0.02, ctx.currentTime + 0.08);
+  duelMachineHumOsc.connect(duelMachineHumGain);
+  duelMachineHumGain.connect(ctx.destination);
+  duelMachineHumOsc.start(ctx.currentTime);
+}
+
+function stopMachineHum(ctx: AudioContext): void {
+  if (!duelMachineHumOsc || !duelMachineHumGain) return;
+  try {
+    duelMachineHumGain.gain.cancelScheduledValues(ctx.currentTime);
+    duelMachineHumGain.gain.setValueAtTime(duelMachineHumGain.gain.value, ctx.currentTime);
+    duelMachineHumGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    duelMachineHumOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    duelMachineHumOsc = null;
+    duelMachineHumGain = null;
+  }
+}
+
+/** AI vs. Me용 기계 느낌 루프 배경음 시작 */
+export function startDuelMachineBgm(): void {
+  try {
+    if (duelMachineInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (duelMachineInterval) return;
+      duelMachineStep = 0;
+      startMachineHum(ctx);
+      runDuelMachineStep(ctx, duelMachineStep);
+      duelMachineStep += 1;
+      duelMachineInterval = setInterval(() => {
+        runDuelMachineStep(ctx, duelMachineStep);
+        duelMachineStep += 1;
+      }, 220);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** AI vs. Me용 기계 느낌 루프 배경음 정지 */
+export function stopDuelMachineBgm(): void {
+  try {
+    if (duelMachineInterval) {
+      clearInterval(duelMachineInterval);
+      duelMachineInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopMachineHum(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runBombTone(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.linearRampToValueAtTime(frequency * 0.92, at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runBombLoopStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  const bassPattern = [196, 0, 185, 0, 208, 0, 174, 0];
+  const bellPattern = [784, 0, 880, 0, 784, 0, 988, 0];
+  const idx = step % bassPattern.length;
+  const bass = bassPattern[idx];
+  const bell = bellPattern[idx];
+  if (bass > 0) runBombTone(ctx, bass, 0.2, "triangle", 0.045, at);
+  if (bell > 0) runBombTone(ctx, bell, 0.12, "sine", 0.03, at + 0.04);
+}
+
+function startBombPad(ctx: AudioContext): void {
+  if (bombPadOsc || bombPadGain) return;
+  bombPadOsc = ctx.createOscillator();
+  bombPadGain = ctx.createGain();
+  bombPadOsc.type = "sine";
+  bombPadOsc.frequency.setValueAtTime(146, ctx.currentTime);
+  bombPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  bombPadGain.gain.linearRampToValueAtTime(0.015, ctx.currentTime + 0.08);
+  bombPadOsc.connect(bombPadGain);
+  bombPadGain.connect(ctx.destination);
+  bombPadOsc.start(ctx.currentTime);
+}
+
+function stopBombPad(ctx: AudioContext): void {
+  if (!bombPadOsc || !bombPadGain) return;
+  try {
+    bombPadGain.gain.cancelScheduledValues(ctx.currentTime);
+    bombPadGain.gain.setValueAtTime(bombPadGain.gain.value, ctx.currentTime);
+    bombPadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    bombPadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    bombPadOsc = null;
+    bombPadGain = null;
+  }
+}
+
+/** 폭탄 돌리기용 긴장+귀여운 루프 배경음 시작 */
+export function startBombBgm(): void {
+  try {
+    if (bombBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (bombBgmInterval) return;
+      bombBgmStep = 0;
+      startBombPad(ctx);
+      runBombLoopStep(ctx, bombBgmStep);
+      bombBgmStep += 1;
+      bombBgmInterval = setInterval(() => {
+        runBombLoopStep(ctx, bombBgmStep);
+        bombBgmStep += 1;
+      }, 280);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 폭탄 돌리기용 루프 배경음 정지 */
+export function stopBombBgm(): void {
+  try {
+    if (bombBgmInterval) {
+      clearInterval(bombBgmInterval);
+      bombBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopBombPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
