@@ -72,7 +72,7 @@ interface FreeTalkingMainScreenProps {
   scenario: FreeTalkingScenario;
   userAnswers: string[];
   onTurnComplete: (userAnswer: string) => void;
-  onAllComplete: () => void;
+  onAllComplete: (finalConversation?: FreeTalkingConversationTurn[]) => void;
   onBack: () => void;
 }
 
@@ -225,6 +225,8 @@ export default function FreeTalkingMainScreen({
         }
       | null
     > = (async () => {
+      // 마지막 턴은 질문이 아닌 마무리 멘트를 유지한다.
+      if (!nextUserTurn) return null;
       if (!nextAiTurn || nextAiTurn.speaker !== "ai" || !nextAiTurn.text?.trim()) return null;
       try {
         const res = await fetch("/api/free-talking/next-question", {
@@ -300,7 +302,7 @@ export default function FreeTalkingMainScreen({
       }
 
       if (nextIndex >= conversation.length) {
-        onAllComplete();
+        onAllComplete(conversation);
         return;
       }
       setCurrentTurnIndex(nextIndex);
@@ -397,7 +399,7 @@ export default function FreeTalkingMainScreen({
       playDing();
       const isLastTurn = currentTurnIndex === conversation.length - 1;
       if (isLastTurn) {
-        onAllComplete();
+        onAllComplete(conversation);
       } else {
         setCurrentTurnIndex((i) => i + 1);
       }

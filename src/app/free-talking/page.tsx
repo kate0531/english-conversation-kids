@@ -9,7 +9,11 @@ import FreeTalkingSampleFollowScreen from "@/components/freeTalking/FreeTalkingS
 import SentenceEvaluationScreen from "@/components/freeTalking/SentenceEvaluationScreen";
 import TaskScoreScreen from "@/components/freeTalking/TaskScoreScreen";
 import { getScenarioForTopic, getRandomAdultFemalePartnerImageUrl } from "@/data/freeTalkingData";
-import type { FreeTalkingScenario, FreeTalkingSampleLine } from "@/types/freeTalking";
+import type {
+  FreeTalkingScenario,
+  FreeTalkingSampleLine,
+  FreeTalkingConversationTurn,
+} from "@/types/freeTalking";
 import { buildThreeTurnScenario } from "@/lib/freeTalkingPlanner";
 import Link from "next/link";
 import {
@@ -61,6 +65,107 @@ function applyRandomPartnerPhoto(s: FreeTalkingScenario): FreeTalkingScenario {
   };
 }
 
+function fallbackKeywords(topic: string): string[] {
+  return topic
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3)
+    .slice(0, 4);
+}
+
+function ensureSevenTurnsWithClosing(s: FreeTalkingScenario): FreeTalkingScenario {
+  const pairs: Array<{
+    qEn: string;
+    qKo: string;
+    hint: string;
+    keywords: string[];
+  }> = [];
+
+  for (let i = 0; i < s.conversation.length; i++) {
+    const ai = s.conversation[i];
+    const user = s.conversation[i + 1];
+    if (ai?.speaker !== "ai" || !ai.text?.trim()) continue;
+    if (user?.speaker !== "user") continue;
+    pairs.push({
+      qEn: ai.text.trim(),
+      qKo: ai.koText?.trim() || ai.text.trim(),
+      hint: user.hint?.trim() || "I can say a short sentence.",
+      keywords: user.keywords?.length ? user.keywords : fallbackKeywords(s.topic),
+    });
+    i += 1;
+  }
+
+  const genericQ = [
+    "Can you tell me one more detail?",
+    "Why do you feel that way?",
+    "When do you usually do that?",
+    "Who do you do it with?",
+    "What is your favorite part?",
+    "Can you give me an example?",
+    "How do you feel after that?",
+  ];
+  const genericKo = [
+    "한 가지 더 자세히 말해 줄래?",
+    "왜 그렇게 느끼는지 말해 줄래?",
+    "보통 언제 그렇게 해?",
+    "누구와 함께 해?",
+    "가장 좋아하는 부분은 뭐야?",
+    "예시를 하나 말해 줄래?",
+    "그 후에 기분이 어때?",
+  ];
+
+  while (pairs.length < 7) {
+    const idx = pairs.length;
+    pairs.push({
+      qEn: genericQ[idx] ?? "Can you tell me more?",
+      qKo: genericKo[idx] ?? "조금 더 말해 줄래?",
+      hint: "I can explain it in one short sentence.",
+      keywords: fallbackKeywords(s.topic),
+    });
+  }
+
+  const normalizedPairs = pairs.slice(0, 7);
+  const normalizedConversation: FreeTalkingConversationTurn[] = [];
+  const normalizedSample: FreeTalkingSampleLine[] = [];
+
+  let turnNo = 1;
+  for (const p of normalizedPairs) {
+    normalizedConversation.push({
+      turn: turnNo++,
+      speaker: "ai",
+      text: p.qEn,
+      koText: p.qKo,
+    });
+    normalizedConversation.push({
+      turn: turnNo++,
+      speaker: "user",
+      expectedLevel: "short sentence",
+      hint: p.hint,
+      keywords: p.keywords.length ? p.keywords : fallbackKeywords(s.topic),
+    });
+    normalizedSample.push({ speaker: "ai", text: p.qEn });
+    normalizedSample.push({ speaker: "user", text: p.hint.split("/")[0]?.trim() || p.hint });
+  }
+
+  normalizedConversation.push({
+    turn: turnNo,
+    speaker: "ai",
+    text: `Thanks for sharing about ${s.topic}. You did great today.`,
+    koText: `${s.topic}에 대해 이야기해줘서 고마워. 오늘 정말 잘했어.`,
+  });
+  normalizedSample.push({
+    speaker: "ai",
+    text: `Thanks for sharing about ${s.topic}. You did great today.`,
+  });
+
+  return {
+    ...s,
+    conversation: normalizedConversation,
+    perfectSampleConversation: normalizedSample,
+  };
+}
+
 export default function FreeTalkingPage() {
   const [step, setStep] = useState<FreeTalkingStep>("gate");
   const [scenario, setScenario] = useState<FreeTalkingScenario | null>(null);
@@ -86,18 +191,18 @@ export default function FreeTalkingPage() {
       if (genRes.ok) {
         const data = (await genRes.json()) as { scenario?: FreeTalkingScenario };
         if (data.scenario?.conversation?.length) {
-          setScenario(applyRandomPartnerPhoto(data.scenario));
+          setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(data.scenario)));
           setStep("main");
           return;
         }
       }
       const generated = await buildThreeTurnScenario(topic);
       const s = generated ?? getScenarioForTopic(topic);
-      setScenario(applyRandomPartnerPhoto(s));
+      setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(s)));
       setStep("main");
     } catch {
       const fallback = getScenarioForTopic(topic);
-      setScenario(applyRandomPartnerPhoto(fallback));
+      setScenario(applyRandomPartnerPhoto(ensureSevenTurnsWithClosing(fallback)));
       setStep("main");
     } finally {
       setIsBuildingScenario(false);
@@ -108,7 +213,10 @@ export default function FreeTalkingPage() {
     setUserAnswers((prev) => [...prev, answer]);
   }, []);
 
-  const handleMainComplete = useCallback(() => {
+  const handleMainComplete = useCallback((finalConversation?: FreeTalkingConversationTurn[]) => {
+    if (finalConversation?.length) {
+      setScenario((prev) => (prev ? { ...prev, conversation: finalConversation } : prev));
+    }
     setStep("result");
   }, []);
 
