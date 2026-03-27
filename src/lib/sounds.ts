@@ -220,3 +220,260 @@ export function playBuzzer(): void {
     /* 무시 */
   }
 }
+
+function runTick(ctx: AudioContext): void {
+  const duration = 0.08;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "square";
+  osc.frequency.setValueAtTime(1180, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(900, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+/** 카운트다운 째깍째깍 효과음 */
+export function playTick(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runTick(ctx)).catch(() => {});
+    } else {
+      runTick(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runGoSignal(ctx: AudioContext): void {
+  const duration = 0.3;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(420, ctx.currentTime);
+  osc.frequency.linearRampToValueAtTime(980, ctx.currentTime + duration * 0.7);
+  osc.frequency.linearRampToValueAtTime(760, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.04);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration + 0.05);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration + 0.05);
+}
+
+/** "GO!" 시작 신호 효과음 */
+export function playGoSignal(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runGoSignal(ctx)).catch(() => {});
+    } else {
+      runGoSignal(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runExplosion(ctx: AudioContext): void {
+  const duration = 0.32;
+  const bufferSize = ctx.sampleRate * duration;
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const output = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i += 1) {
+    const decay = 1 - i / bufferSize;
+    output[i] = (Math.random() * 2 - 1) * decay;
+  }
+  const noise = ctx.createBufferSource();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  noise.buffer = buffer;
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(1600, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(160, ctx.currentTime + duration);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+  noise.start(ctx.currentTime);
+  noise.stop(ctx.currentTime + duration);
+}
+
+/** 폭탄 폭발/종료 효과음 */
+export function playExplosion(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runExplosion(ctx)).catch(() => {});
+    } else {
+      runExplosion(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runLaserPulse(ctx: AudioContext): void {
+  const duration = 0.12;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(320, ctx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(980, ctx.currentTime + duration);
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+  osc.start(ctx.currentTime);
+  osc.stop(ctx.currentTime + duration);
+}
+
+/** 대결 게이지 변동 시 레이저 효과음 */
+export function playLaserPulse(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runLaserPulse(ctx)).catch(() => {});
+    } else {
+      runLaserPulse(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runCuteTick(ctx: AudioContext): void {
+  const t = ctx.currentTime;
+  const first = ctx.createOscillator();
+  const firstGain = ctx.createGain();
+  first.type = "triangle";
+  first.frequency.setValueAtTime(980, t);
+  first.frequency.exponentialRampToValueAtTime(860, t + 0.06);
+  first.connect(firstGain);
+  firstGain.connect(ctx.destination);
+  firstGain.gain.setValueAtTime(0.001, t);
+  firstGain.gain.linearRampToValueAtTime(0.08, t + 0.01);
+  firstGain.gain.exponentialRampToValueAtTime(0.01, t + 0.07);
+  first.start(t);
+  first.stop(t + 0.07);
+
+  const second = ctx.createOscillator();
+  const secondGain = ctx.createGain();
+  second.type = "sine";
+  second.frequency.setValueAtTime(1320, t + 0.05);
+  second.frequency.exponentialRampToValueAtTime(1120, t + 0.11);
+  second.connect(secondGain);
+  secondGain.connect(ctx.destination);
+  secondGain.gain.setValueAtTime(0.001, t + 0.05);
+  secondGain.gain.linearRampToValueAtTime(0.07, t + 0.06);
+  secondGain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+  second.start(t + 0.05);
+  second.stop(t + 0.12);
+}
+
+/** 대결 게임용 귀여운 째깍째깍 효과음 */
+export function playCuteTick(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runCuteTick(ctx)).catch(() => {});
+    } else {
+      runCuteTick(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runVictoryBlast(ctx: AudioContext): void {
+  const t = ctx.currentTime;
+  const freqs = [392, 523, 659, 880];
+  freqs.forEach((f, idx) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(f, t + idx * 0.06);
+    osc.frequency.linearRampToValueAtTime(f * 1.5, t + idx * 0.06 + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.001, t + idx * 0.06);
+    gain.gain.linearRampToValueAtTime(0.12, t + idx * 0.06 + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.01, t + idx * 0.06 + 0.2);
+    osc.start(t + idx * 0.06);
+    osc.stop(t + idx * 0.06 + 0.2);
+  });
+}
+
+/** 대결 승리 시 드라마틱 폭발 사운드 */
+export function playVictoryBlast(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runVictoryBlast(ctx)).catch(() => {});
+    } else {
+      runVictoryBlast(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runDefeatBlast(ctx: AudioContext): void {
+  const t = ctx.currentTime;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(280, t);
+  osc.frequency.exponentialRampToValueAtTime(90, t + 0.28);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, t);
+  gain.gain.linearRampToValueAtTime(0.16, t + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, t + 0.32);
+  osc.start(t);
+  osc.stop(t + 0.32);
+
+  const tail = ctx.createOscillator();
+  const tailGain = ctx.createGain();
+  tail.type = "square";
+  tail.frequency.setValueAtTime(120, t + 0.22);
+  tail.frequency.exponentialRampToValueAtTime(70, t + 0.42);
+  tail.connect(tailGain);
+  tailGain.connect(ctx.destination);
+  tailGain.gain.setValueAtTime(0.001, t + 0.22);
+  tailGain.gain.linearRampToValueAtTime(0.09, t + 0.24);
+  tailGain.gain.exponentialRampToValueAtTime(0.01, t + 0.45);
+  tail.start(t + 0.22);
+  tail.stop(t + 0.45);
+}
+
+/** 대결 패배 시 드라마틱 실패 사운드 */
+export function playDefeatBlast(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().then(() => runDefeatBlast(ctx)).catch(() => {});
+    } else {
+      runDefeatBlast(ctx);
+    }
+  } catch {
+    /* 무시 */
+  }
+}
