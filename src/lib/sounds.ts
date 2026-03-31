@@ -494,6 +494,10 @@ let memoryBgmInterval: ReturnType<typeof setInterval> | null = null;
 let memoryBgmStep = 0;
 let memoryPadOsc: OscillatorNode | null = null;
 let memoryPadGain: GainNode | null = null;
+let frogBgmInterval: ReturnType<typeof setInterval> | null = null;
+let frogBgmStep = 0;
+let frogPadOsc: OscillatorNode | null = null;
+let frogPadGain: GainNode | null = null;
 
 function runMachinePulse(
   ctx: AudioContext,
@@ -913,6 +917,165 @@ export function stopMemoryBgm(): void {
     }
     const ctx = getAudioContext();
     if (ctx) stopMemoryPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runFrogCroak(ctx: AudioContext, at: number, volume = 0.06): void {
+  const main = ctx.createOscillator();
+  const body = ctx.createOscillator();
+  const mix = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+
+  main.type = "triangle";
+  main.frequency.setValueAtTime(235, at);
+  main.frequency.exponentialRampToValueAtTime(178, at + 0.085);
+
+  body.type = "sine";
+  body.frequency.setValueAtTime(330, at);
+  body.frequency.exponentialRampToValueAtTime(245, at + 0.085);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(1200, at);
+  filter.frequency.exponentialRampToValueAtTime(650, at + 0.09);
+
+  main.connect(mix);
+  body.connect(mix);
+  mix.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  mix.gain.setValueAtTime(0.58, at);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + 0.1);
+
+  main.start(at);
+  body.start(at);
+  main.stop(at + 0.1);
+  body.stop(at + 0.1);
+}
+
+/** 청개구리 게임용 짧은 개구리 효과음 */
+export function playFrogCroak(): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const playNow = () => runFrogCroak(ctx, ctx.currentTime + 0.005, 0.08);
+    if (ctx.state === "suspended") {
+      ctx.resume().then(playNow).catch(() => {});
+    } else {
+      playNow();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runFrogTone(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.linearRampToValueAtTime(frequency * 1.03, at + duration * 0.45);
+  osc.frequency.linearRampToValueAtTime(frequency * 0.92, at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runFrogLoopStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  const bellPattern = [392, 0, 523, 659, 0, 523, 440, 0];
+  const pulsePattern = [196, 220, 196, 165, 196, 220, 247, 220];
+  const idx = step % bellPattern.length;
+  const bell = bellPattern[idx];
+  runFrogTone(ctx, pulsePattern[idx], 0.16, "triangle", 0.012, at);
+  if (bell > 0) runFrogTone(ctx, bell, 0.08, "sine", 0.02, at + 0.03);
+  // 크로크 빈도는 낮춰서 실제 개구리처럼 간헐적으로 배치
+  if (idx === 3) runFrogCroak(ctx, at + 0.09, 0.05);
+  if (idx === 7) runFrogCroak(ctx, at + 0.1, 0.042);
+}
+
+function startFrogPad(ctx: AudioContext): void {
+  if (frogPadOsc || frogPadGain) return;
+  frogPadOsc = ctx.createOscillator();
+  frogPadGain = ctx.createGain();
+  frogPadOsc.type = "triangle";
+  frogPadOsc.frequency.setValueAtTime(123, ctx.currentTime);
+  frogPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  frogPadGain.gain.linearRampToValueAtTime(0.0018, ctx.currentTime + 0.08);
+  frogPadOsc.connect(frogPadGain);
+  frogPadGain.connect(ctx.destination);
+  frogPadOsc.start(ctx.currentTime);
+}
+
+function stopFrogPad(ctx: AudioContext): void {
+  if (!frogPadOsc || !frogPadGain) return;
+  try {
+    frogPadGain.gain.cancelScheduledValues(ctx.currentTime);
+    frogPadGain.gain.setValueAtTime(frogPadGain.gain.value, ctx.currentTime);
+    frogPadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    frogPadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    frogPadOsc = null;
+    frogPadGain = null;
+  }
+}
+
+/** 청개구리 게임용 개구리+벨 루프 배경음 시작 */
+export function startFrogBgm(): void {
+  try {
+    if (frogBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (frogBgmInterval) return;
+      frogBgmStep = 0;
+      startFrogPad(ctx);
+      runFrogLoopStep(ctx, frogBgmStep);
+      frogBgmStep += 1;
+      frogBgmInterval = setInterval(() => {
+        runFrogLoopStep(ctx, frogBgmStep);
+        frogBgmStep += 1;
+      }, 230);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 청개구리 게임용 배경음 정지 */
+export function stopFrogBgm(): void {
+  try {
+    if (frogBgmInterval) {
+      clearInterval(frogBgmInterval);
+      frogBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopFrogPad(ctx);
   } catch {
     /* 무시 */
   }

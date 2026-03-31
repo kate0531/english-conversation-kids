@@ -12,18 +12,21 @@ import {
   playDefeatBlast,
   playExplosion,
   playGoSignal,
+  playFrogCroak,
   playLaserPulse,
   playTransition,
   playVictoryBlast,
   startDuelMachineBgm,
+  startFrogBgm,
   startMemoryBgm,
   startWordChainBgm,
   stopDuelMachineBgm,
+  stopFrogBgm,
   stopMemoryBgm,
   stopWordChainBgm,
 } from "@/lib/sounds";
 
-type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair" | "wordchain" | "memory";
+type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair" | "wordchain" | "memory" | "frog";
 type RoundPhase = "idle" | "countdown" | "live" | "judging" | "result";
 
 interface BombMission {
@@ -69,6 +72,12 @@ interface WordChainEntry {
 interface MemoryRound {
   id: string;
   words: string[];
+}
+
+interface FrogPuzzle {
+  id: string;
+  ai: string;
+  opposite: string;
 }
 
 const BOMB_MISSIONS: BombMission[] = [
@@ -590,6 +599,24 @@ const MEMORY_ROUNDS: MemoryRound[] = [
   { id: "mem-10", words: ["drum", "map", "pencil", "lemon", "north"] },
 ];
 
+const FROG_PUZZLES: FrogPuzzle[] = [
+  { id: "frog-1", ai: "I like apples.", opposite: "I don't like apples." },
+  { id: "frog-2", ai: "I can swim.", opposite: "I can't swim." },
+  { id: "frog-3", ai: "She is happy.", opposite: "She is not happy." },
+  { id: "frog-4", ai: "We have homework.", opposite: "We don't have homework." },
+  { id: "frog-5", ai: "He can play soccer.", opposite: "He can't play soccer." },
+  { id: "frog-6", ai: "They are ready.", opposite: "They are not ready." },
+  { id: "frog-7", ai: "I want milk.", opposite: "I don't want milk." },
+  { id: "frog-8", ai: "My dad is at home.", opposite: "My dad is not at home." },
+  { id: "frog-9", ai: "We can go now.", opposite: "We can't go now." },
+  { id: "frog-10", ai: "She likes music.", opposite: "She doesn't like music." },
+  { id: "frog-11", ai: "He has a bike.", opposite: "He doesn't have a bike." },
+  { id: "frog-12", ai: "I am hungry.", opposite: "I am not hungry." },
+  { id: "frog-13", ai: "They are my friends.", opposite: "They are not my friends." },
+  { id: "frog-14", ai: "We can see stars.", opposite: "We can't see stars." },
+  { id: "frog-15", ai: "She can dance.", opposite: "She can't dance." },
+];
+
 const FLOATING_ITEMS = ["💣", "⚡", "🔥", "💥", "⭐", "🧨", "🕒", "🎯", "🎮", "✨"];
 
 type BombMood = "idle" | "active" | "success" | "fail";
@@ -802,8 +829,18 @@ export default function GamePage() {
   const [memoryReplayGlow, setMemoryReplayGlow] = useState(false);
   const [memoryNewRoundGlow, setMemoryNewRoundGlow] = useState(false);
 
+  const [frogPuzzle, setFrogPuzzle] = useState<FrogPuzzle>(() => FROG_PUZZLES[0]);
+  const [frogInput, setFrogInput] = useState("");
+  const [frogAttempts, setFrogAttempts] = useState(0);
+  const [frogSuccess, setFrogSuccess] = useState(false);
+  const [frogMessage, setFrogMessage] = useState("AI 문장을 듣고 반대로 말해보세요!");
+  const [frogCelebrate, setFrogCelebrate] = useState(false);
+  const [frogShake, setFrogShake] = useState(false);
+  const [frogSnakeBurst, setFrogSnakeBurst] = useState(false);
+
   const activeRoundRef = useRef<"bomb" | "duel" | null>(null);
   const memoryPlaybackTokenRef = useRef(0);
+  const previousModeRef = useRef<ScreenMode>("menu");
 
   const { isListening, start, stop, toggle, supported, sttError, clearSttError, isProcessing } =
     useSpeechRecognition({
@@ -983,6 +1020,20 @@ export default function GamePage() {
     void runMemoryCountdownAndPlay(round.words, token);
   }, [resetSharedTranscript, runMemoryCountdownAndPlay, stopHintSpeech]);
 
+  const beginFrogRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const picked = pickRandom(FROG_PUZZLES);
+    setFrogPuzzle(picked);
+    setFrogInput("");
+    setFrogAttempts(0);
+    setFrogSuccess(false);
+    setFrogCelebrate(false);
+    setFrogShake(false);
+    setFrogSnakeBurst(false);
+    setFrogMessage("문장을 눌러 듣고, 반대로 말해 보세요.");
+  }, [resetSharedTranscript]);
+
   const triggerWordChainCelebration = useCallback(() => {
     if (!wordChainFinished) return;
     setWordChainCelebrate(true);
@@ -1050,6 +1101,39 @@ export default function GamePage() {
     memoryWrongCount,
     memoryReplayLeft,
   ]);
+
+  const submitFrogTry = useCallback(() => {
+    if (frogSuccess) return;
+    const sourceText = normalizeHeardText(frogInput) || normalizeHeardText(liveTranscript);
+    if (!sourceText) {
+      setFrogMessage("입력된 문장이 없어요. 음성 또는 텍스트로 반대로 말해보세요.");
+      playBuzzer();
+      return;
+    }
+
+    setFrogAttempts((prev) => prev + 1);
+    const correct = isSentenceMatch(sourceText, frogPuzzle.opposite);
+    if (correct) {
+      setFrogSuccess(true);
+      setFrogCelebrate(true);
+      setFrogMessage("PASS! 반대로 말하기 성공!");
+      playFrogCroak();
+      playVictoryBlast();
+      playTransition();
+      window.setTimeout(() => setFrogCelebrate(false), 1300);
+      return;
+    }
+
+    setFrogSuccess(false);
+    setFrogMessage("아쉽! AI 문장과 반대로 다시 말해보세요.");
+    setFrogShake(true);
+    setFrogSnakeBurst(true);
+    window.setTimeout(() => setFrogShake(false), 520);
+    window.setTimeout(() => setFrogSnakeBurst(false), 760);
+    playFrogCroak();
+    playDefeatBlast();
+    playBuzzer();
+  }, [frogSuccess, frogInput, liveTranscript, frogPuzzle.opposite]);
 
   const submitTwentyGuess = useCallback(() => {
     const raw = twentyGuess.trim();
@@ -1403,12 +1487,21 @@ export default function GamePage() {
   }, [liveTranscript, mode, isListening, isProcessing]);
 
   useEffect(() => {
-    if (mode === "memory") return;
-    stopMemoryPlayback();
+    if (mode !== "frog") return;
+    if (!isListening && !isProcessing) return;
+    setFrogInput(liveTranscript);
+  }, [liveTranscript, mode, isListening, isProcessing]);
+
+  useEffect(() => {
+    if (previousModeRef.current === "memory" && mode !== "memory") {
+      stopMemoryPlayback();
+    }
+    previousModeRef.current = mode;
   }, [mode, stopMemoryPlayback]);
 
   useEffect(() => {
     if (mode === "memory") {
+      stopFrogBgm();
       stopDuelMachineBgm();
       stopWordChainBgm();
       startMemoryBgm();
@@ -1416,7 +1509,17 @@ export default function GamePage() {
         stopMemoryBgm();
       };
     }
+    if (mode === "frog") {
+      stopMemoryBgm();
+      stopDuelMachineBgm();
+      stopWordChainBgm();
+      startFrogBgm();
+      return () => {
+        stopFrogBgm();
+      };
+    }
     if (mode === "wordchain" || mode === "duel" || mode === "twenty") {
+      stopFrogBgm();
       stopMemoryBgm();
       stopDuelMachineBgm();
       startWordChainBgm();
@@ -1425,6 +1528,7 @@ export default function GamePage() {
       };
     }
     if (mode === "bomb" || mode === "password" || mode === "repair") {
+      stopFrogBgm();
       stopMemoryBgm();
       stopWordChainBgm();
       startDuelMachineBgm();
@@ -1432,11 +1536,13 @@ export default function GamePage() {
       stopDuelMachineBgm();
       stopWordChainBgm();
       stopMemoryBgm();
+      stopFrogBgm();
     }
     return () => {
       stopDuelMachineBgm();
       stopWordChainBgm();
       stopMemoryBgm();
+      stopFrogBgm();
     };
   }, [mode]);
 
@@ -1448,6 +1554,7 @@ export default function GamePage() {
       stopDuelMachineBgm();
       stopWordChainBgm();
       stopMemoryBgm();
+      stopFrogBgm();
     };
   }, [stop, stopMemoryPlayback]);
 
@@ -1565,6 +1672,16 @@ export default function GamePage() {
           0% { transform: scale(1); opacity: 1; }
           45% { transform: scale(1.2); opacity: 1; }
           100% { transform: scale(0.88); opacity: 0.6; }
+        }
+        @keyframes frog-hop-burst {
+          0% { transform: translateY(24px) scale(0.75) rotate(0deg); opacity: 0; }
+          20% { opacity: 1; }
+          100% { transform: translateY(-220px) scale(1.25) rotate(16deg); opacity: 0; }
+        }
+        @keyframes snake-pop-down {
+          0% { transform: translateY(-90px) scale(0.82) rotate(-10deg); opacity: 0; }
+          30% { transform: translateY(14px) scale(1.08) rotate(8deg); opacity: 1; }
+          100% { transform: translateY(120px) scale(0.9) rotate(-6deg); opacity: 0; }
         }
       `}</style>
 
@@ -1691,6 +1808,19 @@ export default function GamePage() {
               <p className="text-sm text-sky-200">Smart Memory</p>
               <h2 className="text-xl font-bold mt-1">AI랑 기억력 대결</h2>
               <p className="text-sm text-white/80 mt-2">5개 단어 순서대로 외워서 말하기</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("frog");
+                beginFrogRound();
+              }}
+              className="rounded-2xl border border-lime-300/40 bg-lime-500/20 hover:bg-lime-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-lime-200">Frog Challenge</p>
+              <h2 className="text-xl font-bold mt-1">AI 청개구리 대결</h2>
+              <p className="text-sm text-white/80 mt-2">AI 문장 반대로 말하기</p>
             </button>
           </section>
         )}
@@ -2301,6 +2431,120 @@ export default function GamePage() {
             >
               새 비밀번호
             </button>
+          </section>
+        )}
+
+        {mode === "frog" && (
+          <section className={`relative overflow-hidden rounded-3xl border border-lime-300/40 bg-gradient-to-b from-emerald-900/65 via-lime-950/65 to-slate-950/80 p-5 space-y-4 ${frogShake ? "animate-[shake_0.5s_linear]" : ""}`}>
+            {frogSnakeBurst && (
+              <div className="absolute inset-0 pointer-events-none z-30 flex justify-center">
+                <span
+                  className="text-6xl"
+                  style={{ animation: "snake-pop-down 0.72s ease-out forwards" }}
+                >
+                  🐍
+                </span>
+              </div>
+            )}
+            {frogCelebrate && (
+              <div className="absolute inset-0 pointer-events-none z-20">
+                {Array.from({ length: 24 }).map((_, i) => (
+                  <span
+                    key={`frog-burst-${i}`}
+                    className="absolute text-xl"
+                    style={{
+                      left: `${(i * 13 + 9) % 100}%`,
+                      bottom: "-12px",
+                      animation: `frog-hop-burst ${0.95 + (i % 4) * 0.24}s ease-out ${i * 0.03}s`,
+                    }}
+                  >
+                    {i % 2 === 0 ? "🐸" : "🍀"}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="absolute -top-12 -right-8 w-36 h-36 rounded-full bg-lime-300/15 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-8 w-36 h-36 rounded-full bg-emerald-300/15 blur-2xl pointer-events-none" />
+
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-lime-100">AI랑 무조건 반대로 말하기</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                speakHint(frogPuzzle.ai);
+                playFrogCroak();
+              }}
+              className="w-full text-left rounded-2xl border border-lime-200/40 bg-lime-400/15 p-4 hover:bg-lime-400/22 transition"
+            >
+              <p className="text-xs text-lime-100/80 mb-1">AI SENTENCE</p>
+              <p className="text-lg font-black text-lime-50">{frogPuzzle.ai}</p>
+              <p className="text-xs text-lime-100/75 mt-1">시도 횟수: {frogAttempts}</p>
+            </button>
+
+            <div className="rounded-2xl border border-emerald-200/35 bg-emerald-500/10 p-4">
+              <p className="text-sm text-emerald-50">{frogMessage}</p>
+            </div>
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={frogInput}
+                onChange={(e) => {
+                  setFrogInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitFrogTry()}
+                placeholder="음성 인식이 약하면 반대 문장을 직접 입력해도 됩니다."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lime-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitFrogTry}
+                className="px-3.5 py-2.5 rounded-xl bg-lime-500 hover:bg-lime-400 text-slate-900 text-sm font-bold"
+              >
+                반대로 말하기
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  speakHint(frogPuzzle.opposite);
+                  playFrogCroak();
+                }}
+                className="py-2.5 rounded-xl border border-lime-300/45 text-lime-100 hover:bg-lime-500/20 transition"
+              >
+                힌트
+              </button>
+              <button
+                type="button"
+                onClick={beginFrogRound}
+                className="py-2.5 rounded-xl border border-emerald-300/45 text-emerald-100 hover:bg-emerald-500/20 transition"
+              >
+                새 문장
+              </button>
+            </div>
           </section>
         )}
 
