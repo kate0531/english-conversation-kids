@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import HomeButton from "@/components/HomeButton";
 import VoiceInputButton from "@/components/VoiceInputButton";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useTTS } from "@/hooks/useTTS";
 import {
   playBuzzer,
   playClick,
@@ -18,7 +19,7 @@ import {
   stopDuelMachineBgm,
 } from "@/lib/sounds";
 
-type ScreenMode = "menu" | "bomb" | "duel";
+type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair";
 type RoundPhase = "idle" | "countdown" | "live" | "judging" | "result";
 
 interface BombMission {
@@ -33,6 +34,26 @@ interface DuelMission {
   taunt: string;
   targetSentences: number;
   seconds: number;
+}
+
+interface TwentyQuestion {
+  id: string;
+  answer: string;
+  keywordHints: string[];
+  sentenceHints: string[];
+}
+
+interface PasswordPuzzle {
+  id: string;
+  answerWords: string[];
+  scrambledWords: string[];
+}
+
+interface RepairPuzzle {
+  id: string;
+  broken: string;
+  fixed: string;
+  focus: "tense" | "plural" | "sv-agreement";
 }
 
 const BOMB_MISSIONS: BombMission[] = [
@@ -52,6 +73,108 @@ const BOMB_MISSIONS: BombMission[] = [
     id: "bomb-3",
     prompt: "Say 2 plans for this weekend right now!",
     targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-4",
+    prompt: "Say 3 animals you like in 10 seconds!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-5",
+    prompt: "Say 2 things in your school bag. GO!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-6",
+    prompt: "Say 3 colors you can see right now!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-7",
+    prompt: "Say 2 hobbies you enjoy after school!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-8",
+    prompt: "Say 3 drinks you like to have!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-9",
+    prompt: "Say 2 rooms in your house. GO!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-10",
+    prompt: "Say 3 things on your study desk!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-11",
+    prompt: "Say 2 places you want to visit!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-12",
+    prompt: "Say 3 fruits in your kitchen now!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-13",
+    prompt: "Say 2 sports you can play!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-14",
+    prompt: "Say 3 school subjects you study!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-15",
+    prompt: "Say 2 things you did yesterday!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-16",
+    prompt: "Say 3 words about today’s weather!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-17",
+    prompt: "Say 2 favorite cartoon characters!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-18",
+    prompt: "Say 3 clothes you are wearing now!",
+    targetSentences: 3,
+    seconds: 10,
+  },
+  {
+    id: "bomb-19",
+    prompt: "Say 2 things you want to learn next!",
+    targetSentences: 2,
+    seconds: 10,
+  },
+  {
+    id: "bomb-20",
+    prompt: "Say 3 words to cheer your friend up!",
+    targetSentences: 3,
     seconds: 10,
   },
 ];
@@ -75,34 +198,388 @@ const DUEL_MISSIONS: DuelMission[] = [
     targetSentences: 3,
     seconds: 14,
   },
+  {
+    id: "duel-4",
+    taunt: "I can say 4 sentences about my family. Can you?",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-5",
+    taunt: "I can make 3 future plans. Try to beat me!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-6",
+    taunt: "I can describe my room in 4 sentences!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-7",
+    taunt: "I can talk about my weekend in 4 sentences. Can you?",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-8",
+    taunt: "I can list 3 fun games I play!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-9",
+    taunt: "I can describe my best friend in 4 lines!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-10",
+    taunt: "I can say 3 reasons I like summer. Can you?",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-11",
+    taunt: "I can make 4 sentences about my school day!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-12",
+    taunt: "I can tell 3 things in my lunch box!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-13",
+    taunt: "I can explain my favorite food in 4 lines!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-14",
+    taunt: "I can say 3 habits I do every morning!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-15",
+    taunt: "I can describe a rainy day in 4 sentences!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-16",
+    taunt: "I can say 3 things I do with my family!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-17",
+    taunt: "I can describe my dream room in 4 lines!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-18",
+    taunt: "I can make 3 sentences about my pet!",
+    targetSentences: 3,
+    seconds: 14,
+  },
+  {
+    id: "duel-19",
+    taunt: "I can tell 4 things I want to buy!",
+    targetSentences: 4,
+    seconds: 15,
+  },
+  {
+    id: "duel-20",
+    taunt: "I can say 3 goals for next month. Can you?",
+    targetSentences: 3,
+    seconds: 14,
+  },
+];
+
+const TWENTY_QUESTIONS: TwentyQuestion[] = [
+  {
+    id: "q-banana",
+    answer: "banana",
+    keywordHints: ["monkey", "yellow", "fruit"],
+    sentenceHints: [
+      "Monkeys like this yellow fruit.",
+      "It is a tropical fruit.",
+      "You peel the skin off to eat it.",
+    ],
+  },
+  {
+    id: "q-apple",
+    answer: "apple",
+    keywordHints: ["red", "round", "fruit"],
+    sentenceHints: [
+      "This fruit is often red or green.",
+      "It can be sweet and crunchy.",
+      "People say one a day keeps the doctor away.",
+    ],
+  },
+  {
+    id: "q-tiger",
+    answer: "tiger",
+    keywordHints: ["animal", "stripe", "jungle"],
+    sentenceHints: [
+      "This big cat has black stripes.",
+      "It is strong and fast.",
+      "It lives in forests and grasslands.",
+    ],
+  },
+  {
+    id: "q-train",
+    answer: "train",
+    keywordHints: ["transport", "rail", "station"],
+    sentenceHints: [
+      "This vehicle runs on rails.",
+      "Many people ride it to travel.",
+      "You can get on it at a station.",
+    ],
+  },
+  {
+    id: "q-pizza",
+    answer: "pizza",
+    keywordHints: ["food", "cheese", "slice"],
+    sentenceHints: [
+      "This food is round and cut into slices.",
+      "It usually has cheese on top.",
+      "People add toppings like pepperoni or mushrooms.",
+    ],
+  },
+  {
+    id: "q-rainbow",
+    answer: "rainbow",
+    keywordHints: ["sky", "color", "rain"],
+    sentenceHints: [
+      "You can see it after rain.",
+      "It has many colors in the sky.",
+      "It looks like a big curved line.",
+    ],
+  },
+  {
+    id: "q-robot",
+    answer: "robot",
+    keywordHints: ["machine", "metal", "helper"],
+    sentenceHints: [
+      "It is a machine that can do tasks.",
+      "Some look like humans.",
+      "People build it with technology.",
+    ],
+  },
+  {
+    id: "q-camera",
+    answer: "camera",
+    keywordHints: ["photo", "lens", "picture"],
+    sentenceHints: [
+      "You use it to take pictures.",
+      "It has a lens in front.",
+      "Phones also have this now.",
+    ],
+  },
+  {
+    id: "q-pencil",
+    answer: "pencil",
+    keywordHints: ["school", "write", "eraser"],
+    sentenceHints: [
+      "Students use it to write.",
+      "It can be sharpened when it gets short.",
+      "You can erase what you wrote.",
+    ],
+  },
+  {
+    id: "q-chocolate",
+    answer: "chocolate",
+    keywordHints: ["sweet", "brown", "snack"],
+    sentenceHints: [
+      "It is a sweet snack.",
+      "It is often brown.",
+      "Many people like it as a dessert.",
+    ],
+  },
+  {
+    id: "q-elephant",
+    answer: "elephant",
+    keywordHints: ["big", "gray", "trunk"],
+    sentenceHints: [
+      "This animal is very big and gray.",
+      "It has a long trunk.",
+      "It can spray water with its trunk.",
+    ],
+  },
+  {
+    id: "q-bus",
+    answer: "bus",
+    keywordHints: ["transport", "stop", "people"],
+    sentenceHints: [
+      "Many people ride this vehicle together.",
+      "You wait for it at a stop.",
+      "It drives on roads in the city.",
+    ],
+  },
+  {
+    id: "q-balloon",
+    answer: "balloon",
+    keywordHints: ["party", "air", "float"],
+    sentenceHints: [
+      "You often see this at parties.",
+      "It is filled with air or helium.",
+      "It can float in the sky.",
+    ],
+  },
+  {
+    id: "q-guitar",
+    answer: "guitar",
+    keywordHints: ["music", "string", "instrument"],
+    sentenceHints: [
+      "This is a musical instrument.",
+      "You play it by using strings.",
+      "Many singers use it on stage.",
+    ],
+  },
+  {
+    id: "q-butterfly",
+    answer: "butterfly",
+    keywordHints: ["insect", "wing", "flower"],
+    sentenceHints: [
+      "This insect has colorful wings.",
+      "It flies from flower to flower.",
+      "It starts life as a caterpillar.",
+    ],
+  },
+  {
+    id: "q-sandwich",
+    answer: "sandwich",
+    keywordHints: ["bread", "lunch", "ham"],
+    sentenceHints: [
+      "You make it with two slices of bread.",
+      "People often eat it for lunch.",
+      "You can put cheese, ham, or vegetables in it.",
+    ],
+  },
+  {
+    id: "q-mountain",
+    answer: "mountain",
+    keywordHints: ["high", "nature", "climb"],
+    sentenceHints: [
+      "This place is very high.",
+      "People hike and climb here.",
+      "You can see snow on top sometimes.",
+    ],
+  },
+  {
+    id: "q-clock",
+    answer: "clock",
+    keywordHints: ["time", "wall", "hour"],
+    sentenceHints: [
+      "This thing shows time.",
+      "You can hang it on a wall.",
+      "It has hands or numbers.",
+    ],
+  },
+  {
+    id: "q-icecream",
+    answer: "ice cream",
+    keywordHints: ["cold", "sweet", "dessert"],
+    sentenceHints: [
+      "This dessert is cold and sweet.",
+      "It can melt on hot days.",
+      "You can eat it in a cone or cup.",
+    ],
+  },
+  {
+    id: "q-library",
+    answer: "library",
+    keywordHints: ["book", "quiet", "study"],
+    sentenceHints: [
+      "This place has many books.",
+      "People read and study quietly here.",
+      "You can borrow books from this place.",
+    ],
+  },
+];
+
+const PASSWORD_SENTENCES: { id: string; words: string[] }[] = [
+  { id: "pw-1", words: ["I", "want", "to", "buy", "three", "apples"] },
+  { id: "pw-2", words: ["We", "go", "to", "school", "every", "morning"] },
+  { id: "pw-3", words: ["My", "brother", "likes", "playing", "soccer", "outside"] },
+  { id: "pw-4", words: ["She", "reads", "a", "book", "before", "bedtime"] },
+  { id: "pw-5", words: ["They", "watch", "funny", "videos", "after", "dinner"] },
+  { id: "pw-6", words: ["Please", "close", "the", "window", "it", "is cold"] },
+  { id: "pw-7", words: ["Our", "teacher", "gives", "us", "easy", "homework"] },
+  { id: "pw-8", words: ["I", "drink", "milk", "with", "my", "breakfast"] },
+  { id: "pw-9", words: ["The", "cat", "sleeps", "on", "the", "sofa"] },
+  { id: "pw-10", words: ["Can", "you", "help", "me", "find", "pencil"] },
+  { id: "pw-11", words: ["My", "friends", "play", "games", "after", "school"] },
+  { id: "pw-12", words: ["She", "eats", "a", "banana", "every", "day"] },
+  { id: "pw-13", words: ["Please", "open", "the", "door", "for", "me"] },
+  { id: "pw-14", words: ["We", "visit", "grandma", "on", "Sunday", "morning"] },
+  { id: "pw-15", words: ["The", "bird", "sings", "near", "my", "window"] },
+  { id: "pw-16", words: ["I", "need", "new", "shoes", "for", "soccer"] },
+  { id: "pw-17", words: ["They", "clean", "their", "room", "every", "Saturday"] },
+  { id: "pw-18", words: ["My", "teacher", "reads", "stories", "to", "us"] },
+  { id: "pw-19", words: ["Can", "we", "watch", "a", "movie", "tonight"] },
+  { id: "pw-20", words: ["I", "always", "carry", "water", "in", "summer"] },
+];
+
+const REPAIR_PUZZLES: RepairPuzzle[] = [
+  { id: "r-1", broken: "I goed to the airport yesterday.", fixed: "I went to the airport yesterday.", focus: "tense" },
+  { id: "r-2", broken: "She go to school every day.", fixed: "She goes to school every day.", focus: "sv-agreement" },
+  { id: "r-3", broken: "He have two cat at home.", fixed: "He has two cats at home.", focus: "plural" },
+  { id: "r-4", broken: "They was happy after class.", fixed: "They were happy after class.", focus: "sv-agreement" },
+  { id: "r-5", broken: "My brother eat lunch at noon.", fixed: "My brother eats lunch at noon.", focus: "sv-agreement" },
+  { id: "r-6", broken: "We buyed a new table.", fixed: "We bought a new table.", focus: "tense" },
+  { id: "r-7", broken: "There is three apple in my bag.", fixed: "There are three apples in my bag.", focus: "plural" },
+  { id: "r-8", broken: "The baby cry last night.", fixed: "The baby cried last night.", focus: "tense" },
+  { id: "r-9", broken: "My mom cook dinner every night.", fixed: "My mom cooks dinner every night.", focus: "sv-agreement" },
+  { id: "r-10", broken: "I have many book on my desk.", fixed: "I have many books on my desk.", focus: "plural" },
+  { id: "r-11", broken: "He do his homework after school.", fixed: "He does his homework after school.", focus: "sv-agreement" },
+  { id: "r-12", broken: "She taked a bus this morning.", fixed: "She took a bus this morning.", focus: "tense" },
+  { id: "r-13", broken: "My friend have a red bike.", fixed: "My friend has a red bike.", focus: "sv-agreement" },
+  { id: "r-14", broken: "There are one pencil in the box.", fixed: "There is one pencil in the box.", focus: "sv-agreement" },
+  { id: "r-15", broken: "They plays soccer on Sunday.", fixed: "They play soccer on Sunday.", focus: "sv-agreement" },
+  { id: "r-16", broken: "I eated pizza for dinner.", fixed: "I ate pizza for dinner.", focus: "tense" },
+  { id: "r-17", broken: "She have two doll in her room.", fixed: "She has two dolls in her room.", focus: "plural" },
+  { id: "r-18", broken: "The dogs runs in the park.", fixed: "The dogs run in the park.", focus: "sv-agreement" },
+  { id: "r-19", broken: "We was late for the movie.", fixed: "We were late for the movie.", focus: "sv-agreement" },
+  { id: "r-20", broken: "He writed three letter yesterday.", fixed: "He wrote three letters yesterday.", focus: "plural" },
 ];
 
 const FLOATING_ITEMS = ["💣", "⚡", "🔥", "💥", "⭐", "🧨", "🕒", "🎯", "🎮", "✨"];
 
 type BombMood = "idle" | "active" | "success" | "fail";
+type TwentyHintMode = "keywords" | "sentences";
 
-function BombBuddy({ mood }: { mood: BombMood }) {
+function BombBuddy({ mood, urgent = false }: { mood: BombMood; urgent?: boolean }) {
   const active = mood === "active";
   const success = mood === "success";
   const fail = mood === "fail";
   return (
-    <div className="flex flex-col items-center justify-center select-none">
-      <div className="relative w-10 h-9 mb-1">
-        <div
-          className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-1.5 h-3.5 rounded-full bg-amber-700 origin-bottom"
-          style={active ? { animation: "bomb-shake 0.5s infinite" } : undefined}
-        />
-        <span
-          className="absolute -top-4 left-1/2 -translate-x-1/2 text-sm"
-          style={active ? { animation: "sparkle 0.9s ease-out infinite" } : undefined}
-        >
-          <span className={`inline-block w-2.5 h-2.5 rounded-full ${success ? "bg-lime-300" : fail ? "bg-amber-300" : "bg-white/80"}`} />
-        </span>
-      </div>
+    <div className="relative flex items-center justify-center select-none pt-5">
       <div
         className="relative w-28 h-28 rounded-full border-4 border-slate-800 bg-gradient-to-b from-slate-500 via-slate-700 to-slate-900 shadow-[inset_0_12px_20px_rgba(255,255,255,0.22),0_12px_20px_rgba(0,0,0,0.22)]"
-        style={active ? { animation: "bomb-shake 0.45s infinite" } : undefined}
+        style={active ? { animation: `bomb-shake ${urgent ? 0.28 : 0.45}s infinite` } : undefined}
       >
+        <div
+          className="absolute left-1/2 -translate-x-1/2 -top-5 w-1.5 h-5 rounded-full bg-amber-700 origin-bottom"
+          style={active ? { animation: `bomb-shake ${urgent ? 0.26 : 0.42}s infinite` } : undefined}
+        />
+        <span
+          className="absolute left-1/2 -translate-x-1/2 -top-7 text-sm"
+          style={active ? { animation: `sparkle ${urgent ? 0.45 : 0.9}s ease-out infinite` } : undefined}
+        >
+          <span
+            className={`inline-block w-2.5 h-2.5 rounded-full ${
+              urgent ? "bg-rose-300" : success ? "bg-lime-300" : fail ? "bg-amber-300" : "bg-white/80"
+            }`}
+          />
+        </span>
         <div className="absolute left-1/2 -translate-x-1/2 top-7 w-14 h-6 rounded-full bg-white/20 blur-[1px]" />
         <div
           className={`absolute left-1/2 -translate-x-1/2 top-10 w-7 h-7 rounded-full border-4 shadow-inner ${
@@ -117,6 +594,29 @@ function BombBuddy({ mood }: { mood: BombMood }) {
 
 function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)];
+}
+
+function shuffleWords(words: string[]): string[] {
+  const arr = [...words];
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  if (arr.every((w, i) => w === words[i])) {
+    arr.push(arr.shift() ?? "");
+  }
+  return arr;
+}
+
+function normalizeWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function tokenizeSentence(text: string): string[] {
+  return text
+    .split(/\s+/)
+    .map((w) => normalizeWord(w))
+    .filter(Boolean);
 }
 
 function countWords(text: string): number {
@@ -137,8 +637,40 @@ function countSentences(text: string): number {
   return Math.max(1, Math.round(words / 4));
 }
 
+function countDuelSpeakingUnits(text: string): number {
+  const trimmed = text.trim();
+  if (!trimmed) return 0;
+  const byMark = trimmed
+    .split(/[.!?]+/)
+    .map((x) => x.trim())
+    .filter(Boolean).length;
+  const byConnectors = trimmed
+    .toLowerCase()
+    .split(/\b(?:and|then|also|because|but|so)\b|,/)
+    .map((x) => x.trim())
+    .filter(Boolean).length;
+  const words = countWords(trimmed);
+  const byWordGroups = words > 0 ? Math.round(words / 3) : 0;
+  return Math.max(1, Math.min(8, Math.max(byMark, byConnectors, byWordGroups)));
+}
+
+function isSentenceMatch(spoken: string, expected: string): boolean {
+  const a = tokenizeSentence(spoken);
+  const b = tokenizeSentence(expected);
+  if (a.length !== b.length) return false;
+  return a.every((word, idx) => word === b[idx]);
+}
+
+function normalizeHeardText(text: string): string {
+  const trimmed = text.trim();
+  const lower = trimmed.toLowerCase();
+  if (!trimmed || lower === "silence" || lower === "(silence)" || lower === "[silence]") return "";
+  return trimmed;
+}
+
 export default function GamePage() {
   const router = useRouter();
+  const { speak: speakHint } = useTTS({ gender: "female" });
 
   const [mode, setMode] = useState<ScreenMode>("menu");
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -151,6 +683,7 @@ export default function GamePage() {
   const [bombDetectedWords, setBombDetectedWords] = useState(0);
   const [bombSuccess, setBombSuccess] = useState(false);
   const [bombMessage, setBombMessage] = useState("");
+  const [bombInputText, setBombInputText] = useState("");
 
   const [duelMission, setDuelMission] = useState<DuelMission>(() => DUEL_MISSIONS[0]);
   const [duelPhase, setDuelPhase] = useState<RoundPhase>("idle");
@@ -162,6 +695,34 @@ export default function GamePage() {
   const [duelMessage, setDuelMessage] = useState("");
   const [duelBeam, setDuelBeam] = useState(50);
   const [duelImpact, setDuelImpact] = useState<"none" | "win" | "lose" | "draw">("none");
+  const [duelSpeechBoost, setDuelSpeechBoost] = useState(0);
+  const [duelInputText, setDuelInputText] = useState("");
+
+  const [twentyQuestion, setTwentyQuestion] = useState<TwentyQuestion>(() => TWENTY_QUESTIONS[0]);
+  const [twentyGuess, setTwentyGuess] = useState("");
+  const [twentyHintMode, setTwentyHintMode] = useState<TwentyHintMode>("keywords");
+  const [twentyAttempts, setTwentyAttempts] = useState(0);
+  const [twentySolved, setTwentySolved] = useState(false);
+  const [twentyMessage, setTwentyMessage] = useState("단어 힌트를 보고 정답을 맞혀보세요.");
+  const [twentyRecentGuesses, setTwentyRecentGuesses] = useState<string[]>([]);
+
+  const [passwordPuzzle, setPasswordPuzzle] = useState<PasswordPuzzle>(() => {
+    const picked = PASSWORD_SENTENCES[0];
+    return { id: picked.id, answerWords: picked.words, scrambledWords: shuffleWords(picked.words) };
+  });
+  const [passwordTranscript, setPasswordTranscript] = useState("");
+  const [passwordPressedNumbers, setPasswordPressedNumbers] = useState<number[]>([]);
+  const [passwordTappedNumber, setPasswordTappedNumber] = useState<number | null>(null);
+  const [passwordMatchedCount, setPasswordMatchedCount] = useState(0);
+  const [passwordUnlocked, setPasswordUnlocked] = useState(false);
+  const [passwordShake, setPasswordShake] = useState(false);
+
+  const [repairPuzzle, setRepairPuzzle] = useState<RepairPuzzle>(() => REPAIR_PUZZLES[0]);
+  const [repairTranscript, setRepairTranscript] = useState("");
+  const [repairAttempts, setRepairAttempts] = useState(0);
+  const [repairRecovered, setRepairRecovered] = useState(false);
+  const [repairShake, setRepairShake] = useState(false);
+  const [repairMessage, setRepairMessage] = useState("고장 문장을 고쳐서 영어로 말해보세요.");
 
   const activeRoundRef = useRef<"bomb" | "duel" | null>(null);
 
@@ -190,6 +751,7 @@ export default function GamePage() {
     setBombDetectedWords(0);
     setBombSuccess(false);
     setBombMessage("");
+    setBombInputText("");
   }, [resetSharedTranscript]);
 
   const beginDuelRound = useCallback(() => {
@@ -206,7 +768,121 @@ export default function GamePage() {
     setDuelMessage("");
     setDuelBeam(50);
     setDuelImpact("none");
+    setDuelSpeechBoost(0);
+    setDuelInputText("");
   }, [resetSharedTranscript]);
+
+  const beginTwentyRound = useCallback(() => {
+    playClick();
+    const picked = pickRandom(TWENTY_QUESTIONS);
+    setTwentyQuestion(picked);
+    setTwentyGuess("");
+    setTwentyHintMode("keywords");
+    setTwentyAttempts(0);
+    setTwentySolved(false);
+    setTwentyMessage("단어 힌트를 보고 정답을 맞혀보세요.");
+    setTwentyRecentGuesses([]);
+  }, []);
+
+  const beginPasswordRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const picked = pickRandom(PASSWORD_SENTENCES);
+    setPasswordPuzzle({
+      id: picked.id,
+      answerWords: picked.words,
+      scrambledWords: shuffleWords(picked.words),
+    });
+    setPasswordTranscript("");
+    setPasswordPressedNumbers([]);
+    setPasswordTappedNumber(null);
+    setPasswordMatchedCount(0);
+    setPasswordUnlocked(false);
+    setPasswordShake(false);
+  }, [resetSharedTranscript]);
+
+  const beginRepairRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const picked = pickRandom(REPAIR_PUZZLES);
+    setRepairPuzzle(picked);
+    setRepairTranscript("");
+    setRepairAttempts(0);
+    setRepairRecovered(false);
+    setRepairShake(false);
+    setRepairMessage("고장 문장을 고쳐서 영어로 말해보세요.");
+  }, [resetSharedTranscript]);
+
+  const submitTwentyGuess = useCallback(() => {
+    const raw = twentyGuess.trim();
+    if (!raw || twentySolved) return;
+    setTwentyRecentGuesses((prev) => [raw, ...prev].slice(0, 6));
+    const guess = raw.toLowerCase().replace(/[^a-z]/g, "");
+    const answer = twentyQuestion.answer.toLowerCase();
+    const normalizedAnswer = answer.replace(/[^a-z]/g, "");
+    const correct = guess === normalizedAnswer || guess.includes(normalizedAnswer);
+    setTwentyAttempts((prev) => prev + 1);
+
+    if (correct) {
+      setTwentySolved(true);
+      setTwentyMessage("정답! PASS!");
+      playVictoryBlast();
+      playTransition();
+      return;
+    }
+
+    if (twentyHintMode === "keywords") {
+      setTwentyHintMode("sentences");
+      setTwentyMessage("아쉽! 문장 힌트로 업그레이드!");
+    } else {
+      setTwentyMessage("조금 더 생각해봐요! 다시 추측!");
+    }
+    playBuzzer();
+  }, [twentyGuess, twentySolved, twentyQuestion.answer, twentyHintMode]);
+
+  const submitPasswordTry = useCallback(() => {
+    const spoken = tokenizeSentence(passwordTranscript);
+    const answer = passwordPuzzle.answerWords.map((w) => normalizeWord(w));
+    if (spoken.length === 0) return;
+    const isExact =
+      spoken.length === answer.length &&
+      answer.every((word, idx) => spoken[idx] === word);
+
+    if (isExact) {
+      setPasswordUnlocked(true);
+      playVictoryBlast();
+      playTransition();
+      return;
+    }
+
+    setPasswordUnlocked(false);
+    setPasswordShake(true);
+    playBuzzer();
+    playDefeatBlast();
+    window.setTimeout(() => setPasswordShake(false), 520);
+  }, [passwordTranscript, passwordPuzzle.answerWords]);
+
+  const submitRepairTry = useCallback(() => {
+    const spoken = repairTranscript.trim();
+    if (!spoken || repairRecovered) return;
+    const correct = isSentenceMatch(spoken, repairPuzzle.fixed);
+    setRepairAttempts((prev) => prev + 1);
+
+    if (correct) {
+      setRepairRecovered(true);
+      setRepairMessage("정상 복구 완료!");
+      playVictoryBlast();
+      playTransition();
+      return;
+    }
+
+    setRepairRecovered(false);
+    setRepairMessage("복구 실패! 문장을 다시 고쳐 말해보세요.");
+    setRepairShake(true);
+    playBuzzer();
+    playDefeatBlast();
+    window.setTimeout(() => setRepairShake(false), 520);
+  }, [repairTranscript, repairRecovered, repairPuzzle.fixed]);
 
   useEffect(() => {
     if (bombPhase !== "countdown") return;
@@ -267,22 +943,40 @@ export default function GamePage() {
 
   useEffect(() => {
     if (activeRoundRef.current !== "bomb") return;
-    const sentenceCount = countSentences(liveTranscript);
-    const wordCount = countWords(liveTranscript);
+    const sourceText = normalizeHeardText(bombInputText) || normalizeHeardText(liveTranscript);
+    const sentenceCount = countSentences(sourceText);
+    const wordCount = countWords(sourceText);
     setBombDetectedSentences(sentenceCount);
     setBombDetectedWords(wordCount);
-  }, [liveTranscript]);
+  }, [liveTranscript, bombInputText, duelPhase, isListening]);
 
   useEffect(() => {
     if (activeRoundRef.current !== "duel") return;
-    const sentenceCount = countSentences(liveTranscript);
-    setDuelUserSentences(sentenceCount);
-  }, [liveTranscript]);
+    const sourceText = normalizeHeardText(duelInputText) || normalizeHeardText(liveTranscript);
+    const unitCount = countDuelSpeakingUnits(sourceText);
+    setDuelUserSentences(unitCount);
+    if (duelPhase === "live" && isListening && sourceText.trim()) {
+      setDuelSpeechBoost((prev) => Math.min(1, prev + 0.3));
+      setDuelBeam((prev) => Math.min(96, prev + 2.4));
+    }
+  }, [liveTranscript, duelInputText, duelPhase, isListening]);
+
+  useEffect(() => {
+    if (duelPhase !== "live") {
+      setDuelSpeechBoost(0);
+      return;
+    }
+    const timer = window.setInterval(() => {
+      setDuelSpeechBoost((prev) => Math.max(0, prev - 0.08));
+    }, 130);
+    return () => window.clearInterval(timer);
+  }, [duelPhase]);
 
   useEffect(() => {
     if (bombPhase !== "judging" || isListening || isProcessing) return;
-    const sentenceCount = countSentences(liveTranscript);
-    const wordCount = countWords(liveTranscript);
+    const sourceText = normalizeHeardText(bombInputText) || normalizeHeardText(liveTranscript);
+    const sentenceCount = countSentences(sourceText);
+    const wordCount = countWords(sourceText);
     const heardClearly = wordCount >= 4;
     const success = heardClearly;
     setBombDetectedSentences(sentenceCount);
@@ -292,12 +986,13 @@ export default function GamePage() {
     setBombPhase("result");
     if (success) playTransition();
     else playBuzzer();
-  }, [bombPhase, isListening, isProcessing, liveTranscript, bombMission.targetSentences]);
+  }, [bombPhase, isListening, isProcessing, liveTranscript, bombInputText, bombMission.targetSentences]);
 
   useEffect(() => {
     if (duelPhase !== "judging" || isListening || isProcessing) return;
-    const userWords = countWords(liveTranscript);
-    const userSentences = countSentences(liveTranscript);
+    const sourceText = normalizeHeardText(duelInputText) || normalizeHeardText(liveTranscript);
+    const userWords = countWords(sourceText);
+    const userSentences = countDuelSpeakingUnits(sourceText);
     const aiSentences = Math.floor(Math.random() * 3) + 2;
     const boostedUser = userSentences + (userWords >= 10 ? 1 : 0);
     const winner: "user" | "ai" | "draw" =
@@ -330,7 +1025,19 @@ export default function GamePage() {
       playLaserPulse();
     }
     setDuelPhase("result");
-  }, [duelPhase, isListening, isProcessing, liveTranscript]);
+  }, [duelPhase, isListening, isProcessing, liveTranscript, duelInputText]);
+
+  useEffect(() => {
+    if (mode !== "bomb") return;
+    if (!isListening && !isProcessing) return;
+    setBombInputText(liveTranscript);
+  }, [mode, isListening, isProcessing, liveTranscript]);
+
+  useEffect(() => {
+    if (mode !== "duel") return;
+    if (!isListening && !isProcessing) return;
+    setDuelInputText(liveTranscript);
+  }, [mode, isListening, isProcessing, liveTranscript]);
 
   useEffect(() => {
     if (duelImpact === "none") return;
@@ -339,7 +1046,35 @@ export default function GamePage() {
   }, [duelImpact]);
 
   useEffect(() => {
-    if (mode === "duel" || mode === "bomb") {
+    if (mode !== "password") return;
+    setPasswordTranscript(liveTranscript);
+    const spoken = tokenizeSentence(liveTranscript);
+    const answer = passwordPuzzle.answerWords.map((w) => normalizeWord(w));
+    let matched = 0;
+    for (let i = 0; i < Math.min(spoken.length, answer.length); i += 1) {
+      if (spoken[i] === answer[i]) matched += 1;
+      else break;
+    }
+    const pressed = passwordPuzzle.answerWords
+      .slice(0, matched)
+      .map((word) => passwordPuzzle.scrambledWords.findIndex((w) => w === word) + 1)
+      .filter((n) => n > 0);
+    setPasswordMatchedCount(matched);
+    setPasswordPressedNumbers(pressed);
+  }, [liveTranscript, mode, passwordPuzzle.answerWords, passwordPuzzle.scrambledWords]);
+
+  useEffect(() => {
+    if (mode !== "twenty") return;
+    setTwentyGuess(liveTranscript);
+  }, [liveTranscript, mode]);
+
+  useEffect(() => {
+    if (mode !== "repair") return;
+    setRepairTranscript(liveTranscript);
+  }, [liveTranscript, mode]);
+
+  useEffect(() => {
+    if (mode === "duel" || mode === "bomb" || mode === "twenty" || mode === "password" || mode === "repair") {
       startDuelMachineBgm();
     } else {
       stopDuelMachineBgm();
@@ -361,9 +1096,11 @@ export default function GamePage() {
     () => Math.max(0, Math.min(100, (bombTimeLeft / Math.max(1, bombMission.seconds)) * 100)),
     [bombTimeLeft, bombMission.seconds]
   );
+  const bombDanger = bombPhase === "live" && bombTimeLeft <= 3;
 
   const duelResultLabel =
     duelWinner === "user" ? "ME" : duelWinner === "ai" ? "AI" : "DRAW";
+  const duelSaberShift = Math.max(-38, Math.min(38, (duelBeam - 50) * 1.1 + duelSpeechBoost * 14));
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white relative overflow-hidden">
@@ -399,6 +1136,57 @@ export default function GamePage() {
           10% { opacity: 1; }
           100% { transform: translateY(240px) rotate(620deg); opacity: 0; }
         }
+        @keyframes quiz-float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-6px); }
+        }
+        @keyframes quiz-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.2); }
+          50% { box-shadow: 0 0 0 10px rgba(16,185,129,0.04); }
+        }
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-8px); }
+          40% { transform: translateX(8px); }
+          60% { transform: translateX(-6px); }
+          80% { transform: translateX(6px); }
+        }
+        @keyframes coin-fall {
+          0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+          10% { opacity: 1; }
+          100% { transform: translateY(220px) rotate(540deg); opacity: 0; }
+        }
+        @keyframes lock-pop {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+        }
+        @keyframes saber-flicker {
+          0%, 100% { filter: brightness(1); }
+          50% { filter: brightness(1.25); }
+        }
+        @keyframes duel-start-glow {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.45); }
+          50% { box-shadow: 0 0 0 10px rgba(129,140,248,0.15); }
+        }
+        @keyframes go-jitter {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          20% { transform: translateY(-3px) rotate(-2deg); }
+          40% { transform: translateY(2px) rotate(2deg); }
+          60% { transform: translateY(-2px) rotate(-1.2deg); }
+          80% { transform: translateY(2px) rotate(1.2deg); }
+        }
+        @keyframes danger-border {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.1); border-color: rgba(251,146,146,0.45); }
+          50% { box-shadow: 0 0 0 10px rgba(248,113,113,0.05); border-color: rgba(239,68,68,0.8); }
+        }
+        @keyframes danger-badge {
+          0%, 100% { transform: translateY(0); opacity: 0.9; }
+          50% { transform: translateY(-2px); opacity: 1; }
+        }
+        @keyframes danger-vignette {
+          0%, 100% { opacity: 0.35; }
+          50% { opacity: 0.78; }
+        }
       `}</style>
 
       {FLOATING_ITEMS.map((item, idx) => (
@@ -433,7 +1221,7 @@ export default function GamePage() {
 
       <main className="relative z-10 max-w-3xl mx-auto px-4 py-6">
         {mode === "menu" && (
-          <section className="grid gap-4 md:grid-cols-2">
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
             <button
               type="button"
               onClick={() => {
@@ -460,11 +1248,63 @@ export default function GamePage() {
               <h2 className="text-xl font-bold mt-1">AI vs. Me</h2>
               <p className="text-sm text-white/80 mt-2">줄다리기/광선검 느낌 대결 게이지</p>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("twenty");
+                beginTwentyRound();
+              }}
+              className="rounded-2xl border border-emerald-300/40 bg-emerald-500/20 hover:bg-emerald-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-emerald-200">Guessing Game</p>
+              <h2 className="text-xl font-bold mt-1">AI랑 스무고개</h2>
+              <p className="text-sm text-white/80 mt-2">단어 힌트 → 문장 힌트 정답 맞히기</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("password");
+                beginPasswordRound();
+              }}
+              className="rounded-2xl border border-violet-300/40 bg-violet-500/20 hover:bg-violet-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-violet-200">Speaking Puzzle</p>
+              <h2 className="text-xl font-bold mt-1">AI랑 자물쇠 풀기</h2>
+              <p className="text-sm text-white/80 mt-2">스크램블 순서 발화로 자물쇠 해제</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("repair");
+                beginRepairRound();
+              }}
+              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-amber-200">Grammar Repair</p>
+              <h2 className="text-xl font-bold mt-1">고장난 AI 복구하기</h2>
+              <p className="text-sm text-white/80 mt-2">틀린 문장을 고쳐서 시스템 복구</p>
+            </button>
           </section>
         )}
 
         {mode === "bomb" && (
-          <section className="rounded-3xl border-2 border-pink-200/80 bg-gradient-to-b from-pink-50/95 via-rose-50/95 to-amber-50/95 p-5 space-y-4 text-gray-800 shadow-[0_10px_30px_rgba(255,182,193,0.28)]">
+          <section
+            className="rounded-3xl border-2 border-pink-200/80 bg-gradient-to-b from-pink-50/95 via-rose-50/95 to-amber-50/95 p-5 space-y-4 text-gray-800 shadow-[0_10px_30px_rgba(255,182,193,0.28)] relative overflow-hidden"
+            style={bombDanger ? { animation: "danger-border 0.55s ease-in-out infinite" } : undefined}
+          >
+            {bombDanger ? (
+              <div
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                  background:
+                    "radial-gradient(circle at center, rgba(255,255,255,0) 45%, rgba(239,68,68,0.22) 72%, rgba(220,38,38,0.45) 100%)",
+                  animation: "danger-vignette 0.55s ease-in-out infinite",
+                }}
+              />
+            ) : null}
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-extrabold text-rose-500">폭탄 돌리기</h2>
               <button
@@ -499,11 +1339,14 @@ export default function GamePage() {
 
             {(bombPhase === "countdown" || bombPhase === "live") && (
               <div className="text-center space-y-3">
-                <div className="text-7xl font-black tracking-tight text-rose-500">
+                <div
+                  className="text-7xl font-black tracking-tight text-rose-500"
+                  style={bombPhase === "live" ? { animation: "go-jitter 0.35s ease-in-out infinite" } : undefined}
+                >
                   {bombPhase === "countdown" ? bombCountdown : "GO!"}
                 </div>
                 <div className="flex items-center justify-center">
-                  <BombBuddy mood={bombPhase === "live" ? "active" : "idle"} />
+                  <BombBuddy mood={bombPhase === "live" ? "active" : "idle"} urgent={bombDanger} />
                 </div>
                 {bombPhase === "live" && (
                   <>
@@ -583,8 +1426,11 @@ export default function GamePage() {
 
             <div className="flex items-center gap-2">
               <input
-                value={liveTranscript}
-                onChange={(e) => setLiveTranscript(e.target.value)}
+                value={bombInputText}
+                onChange={(e) => {
+                  setBombInputText(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
                 placeholder="음성이 잘 안 되면 여기에 영어로 직접 입력해도 됩니다."
                 className="flex-1 rounded-xl bg-white border border-pink-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-300/60"
               />
@@ -630,7 +1476,7 @@ export default function GamePage() {
             </div>
 
             <div className="rounded-xl border border-cyan-200/30 bg-cyan-500/10 p-4">
-              <p className="text-xs text-cyan-100/80 mb-1">TAUNT</p>
+              <p className="text-xs text-cyan-100/80 mb-1">대결</p>
               <p className="font-medium">{duelMission.taunt}</p>
             </div>
 
@@ -638,7 +1484,7 @@ export default function GamePage() {
               <button
                 type="button"
                 onClick={beginDuelRound}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-500 font-semibold"
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 font-semibold animate-[duel-start-glow_1.4s_ease-in-out_infinite]"
               >
                 대결 시작
               </button>
@@ -668,18 +1514,42 @@ export default function GamePage() {
                 <span>AI</span>
                 <span>ME</span>
               </div>
-              <div className="h-5 rounded-full bg-white/15 overflow-hidden relative">
+              <div className="h-7 rounded-full bg-slate-950/70 overflow-hidden relative border border-cyan-200/25">
                 <div
                   className="absolute inset-y-0 left-0 rounded-full"
                   style={{
                     width: `${duelBeam}%`,
                     background:
-                      "linear-gradient(90deg, rgba(34,211,238,0.95), rgba(129,140,248,0.95), rgba(56,189,248,0.95))",
+                      "linear-gradient(90deg, rgba(34,211,238,0.98), rgba(129,140,248,0.98), rgba(56,189,248,0.98))",
                     backgroundSize: "200% 200%",
                     animation: "beam-flow 1.2s linear infinite",
                   }}
                 />
+                <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-white/40" />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-16 h-2 rounded-full"
+                  style={{
+                    left: `calc(50% + ${duelSaberShift}px - 32px)`,
+                    background:
+                      "linear-gradient(90deg, rgba(6,182,212,0.95), rgba(255,255,255,0.95), rgba(99,102,241,0.95))",
+                    boxShadow:
+                      "0 0 14px rgba(34,211,238,0.9), 0 0 22px rgba(129,140,248,0.65)",
+                    animation: "saber-flicker 0.7s ease-in-out infinite",
+                  }}
+                />
+                <div
+                  className="absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white/90"
+                  style={{
+                    left: `calc(50% + ${duelSaberShift}px - 8px)`,
+                    boxShadow: "0 0 16px rgba(255,255,255,0.9)",
+                  }}
+                />
               </div>
+              {duelPhase === "live" && (
+                <p className="text-[11px] text-cyan-100/75">
+                  말하기를 시작하면 광선검이 내 쪽으로 밀려요!
+                </p>
+              )}
               <div className="flex justify-between text-sm">
                 <span>AI 문장: {duelAiSentences}</span>
                 <span>내 문장: {duelUserSentences}</span>
@@ -718,13 +1588,416 @@ export default function GamePage() {
 
             <div className="flex items-center gap-2">
               <input
-                value={liveTranscript}
-                onChange={(e) => setLiveTranscript(e.target.value)}
+                value={duelInputText}
+                onChange={(e) => {
+                  setDuelInputText(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
                 placeholder="음성이 잘 안 되면 여기에 영어로 입력해도 됩니다."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
             </div>
+          </section>
+        )}
+
+        {mode === "twenty" && (
+          <section className="relative overflow-hidden rounded-3xl border border-emerald-300/40 bg-gradient-to-b from-emerald-900/55 via-slate-900/60 to-emerald-950/60 p-5 space-y-4">
+            <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-emerald-300/10 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-8 w-36 h-36 rounded-full bg-cyan-300/10 blur-2xl pointer-events-none" />
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-emerald-200">AI랑 스무고개</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div
+              className={`rounded-2xl border p-4 transition-colors duration-300 ${
+                twentyHintMode === "keywords"
+                  ? "border-teal-300/70 bg-teal-100/35 backdrop-blur-[1px]"
+                  : "border-indigo-300/75 bg-slate-900/72 backdrop-blur-[1px]"
+              }`}
+              style={{ animation: "quiz-glow 2.4s ease-in-out infinite" }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs font-semibold ${twentyHintMode === "keywords" ? "text-emerald-700" : "text-indigo-100"}`}>
+                  HINT MODE
+                </p>
+                <p className={`text-xs ${twentyHintMode === "keywords" ? "text-emerald-700/80" : "text-indigo-100/80"}`}>
+                  시도 {twentyAttempts}회
+                </p>
+              </div>
+              <div className="mt-2 flex items-center gap-2 text-xs">
+                {twentyHintMode === "keywords" ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-teal-500/70 bg-teal-100/75 text-teal-900">
+                    <span style={{ animation: "quiz-float 2.6s ease-in-out infinite" }}>💡</span>
+                    단어 힌트
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-indigo-300/80 bg-indigo-900/70 text-indigo-50">
+                    <span style={{ animation: "quiz-float 2.2s ease-in-out infinite" }}>🧠</span>
+                    문장 힌트
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <div className={`h-1.5 flex-1 rounded-full ${twentyHintMode === "keywords" ? "bg-emerald-500" : "bg-emerald-300/35"}`} />
+                <div className={`h-1.5 flex-1 rounded-full ${twentyHintMode === "sentences" ? "bg-indigo-300" : "bg-indigo-200/25"}`} />
+              </div>
+              {twentyHintMode === "keywords" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {twentyQuestion.keywordHints.map((hint) => (
+                    <button
+                      type="button"
+                      key={`${twentyQuestion.id}-${hint}`}
+                      onClick={() => {
+                        playClick();
+                        speakHint(hint);
+                      }}
+                      className="px-2.5 py-1 rounded-full text-xs bg-emerald-100/75 border border-emerald-500/70 text-emerald-900 hover:bg-emerald-200/85 transition font-semibold"
+                    >
+                      {hint}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <ul className="mt-2 text-sm text-white/90 space-y-1.5">
+                  {twentyQuestion.sentenceHints.map((hint, idx) => (
+                    <button
+                      type="button"
+                      key={`${twentyQuestion.id}-hint-${idx}`}
+                      onClick={() => {
+                        playClick();
+                        speakHint(hint);
+                      }}
+                      className="w-full text-left rounded-lg bg-indigo-950/85 border border-indigo-300/45 px-2.5 py-1.5 text-indigo-50 hover:bg-indigo-900 transition"
+                    >
+                      {hint}
+                    </button>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-white/15 bg-white/5 p-3">
+              <p className="text-sm text-white/90">{twentyMessage}</p>
+              {twentyRecentGuesses.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {twentyRecentGuesses.map((g, idx) => (
+                    <span
+                      key={`${g}-${idx}`}
+                      className="px-2 py-0.5 rounded-full text-[11px] bg-slate-700/60 border border-slate-500/40 text-white/85"
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {twentySolved && (
+              <div className="relative overflow-hidden rounded-xl border border-emerald-300/40 bg-emerald-400/20 p-4 text-center">
+                <div className="absolute inset-0 pointer-events-none">
+                  {Array.from({ length: 16 }).map((_, i) => (
+                    <span
+                      key={`twenty-confetti-${i}`}
+                      className="absolute w-2 h-3 rounded-sm"
+                      style={{
+                        left: `${(i * 17 + 11) % 100}%`,
+                        top: "-10px",
+                        background: i % 2 === 0 ? "#34d399" : "#22d3ee",
+                        animation: `confetti-drop ${1 + (i % 4) * 0.2}s ease-out ${i * 0.03}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <p className="text-xl font-bold text-emerald-100">PASS!</p>
+                <p className="text-sm text-emerald-50 mt-1">정답: {twentyQuestion.answer}</p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={twentyGuess}
+                onChange={(e) => setTwentyGuess(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submitTwentyGuess()}
+                placeholder="정답을 영어 단어로 입력하세요."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitTwentyGuess}
+                disabled={!twentyGuess.trim() || twentySolved}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                정답 제출
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={beginTwentyRound}
+              className="w-full py-2.5 rounded-xl border border-emerald-300/30 text-emerald-100 hover:bg-emerald-500/20 transition"
+            >
+              새 문제
+            </button>
+          </section>
+        )}
+
+        {mode === "password" && (
+          <section
+            className={`relative overflow-hidden rounded-3xl border border-violet-200/60 bg-gradient-to-b from-violet-700/40 via-indigo-700/35 to-cyan-700/30 p-5 space-y-4 ${
+              passwordShake ? "animate-[shake_0.5s_linear]" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-violet-100">AI랑 자물쇠 풀기</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                  stop();
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div className="relative rounded-2xl border border-violet-200/55 bg-white/15 backdrop-blur-sm p-4">
+              {passwordUnlocked && (
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-r from-yellow-200/15 via-white/10 to-cyan-200/15 animate-pulse" />
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={`beam-${i}`}
+                      className="absolute left-1/2 top-1/2 w-1 h-36 bg-gradient-to-t from-yellow-200/0 via-yellow-100/80 to-white/90"
+                      style={{
+                        transform: `translate(-50%, -50%) rotate(${i * 45}deg)`,
+                        animation: `duel-stars 1.1s ease-out ${i * 0.08}s`,
+                      }}
+                    />
+                  ))}
+                  {Array.from({ length: 24 }).map((_, i) => (
+                    <span
+                      key={`coin-${i}`}
+                      className="absolute text-lg"
+                      style={{
+                        left: `${(i * 11 + 7) % 100}%`,
+                        top: "-12px",
+                        animation: `coin-fall ${0.9 + (i % 4) * 0.2}s ease-out ${i * 0.03}s`,
+                      }}
+                    >
+                      🪙
+                    </span>
+                  ))}
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <span
+                      key={`smile-${i}`}
+                      className="absolute text-lg"
+                      style={{
+                        left: `${(i * 19 + 5) % 100}%`,
+                        top: `${8 + (i % 3) * 10}%`,
+                        animation: `duel-stars ${0.9 + (i % 3) * 0.2}s ease-out ${i * 0.05}s`,
+                      }}
+                    >
+                      {i % 2 === 0 ? "😄" : "✨"}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-center gap-4">
+                <div className="w-24 h-24 rounded-2xl border-2 border-violet-100/70 bg-white/25 flex items-center justify-center text-5xl shadow-[0_0_22px_rgba(196,181,253,0.45)]">
+                  <span style={{ animation: "lock-pop 1.2s ease-in-out infinite" }}>
+                    {passwordUnlocked ? "🔓" : "🔒"}
+                  </span>
+                </div>
+                <div className="text-sm text-violet-50">
+                  <p className="font-semibold">Digital Lock</p>
+                  <p className="text-xs mt-1">정답 순서로 말하면 잠금 해제!</p>
+                  <p className="text-xs mt-1">진행: {passwordMatchedCount}/{passwordPuzzle.answerWords.length}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {passwordPuzzle.scrambledWords.map((word, idx) => {
+                const keyNumber = idx + 1;
+                const pressed = passwordPressedNumbers.includes(keyNumber);
+                const tapped = passwordTappedNumber === keyNumber;
+                return (
+                  <button
+                    key={`pad-${passwordPuzzle.id}-${keyNumber}`}
+                    type="button"
+                    onClick={() => {
+                      playClick();
+                      speakHint(word);
+                      setPasswordTappedNumber(keyNumber);
+                      window.setTimeout(() => setPasswordTappedNumber((n) => (n === keyNumber ? null : n)), 220);
+                    }}
+                    className={`rounded-xl border py-2 transition relative overflow-hidden ${
+                      pressed
+                        ? "bg-emerald-400/35 border-emerald-200 text-emerald-50 shadow-[0_0_22px_rgba(52,211,153,0.65)]"
+                        : tapped
+                        ? "bg-violet-400/30 border-violet-200 text-violet-50 shadow-[0_0_16px_rgba(196,181,253,0.65)]"
+                        : "bg-slate-900/55 border-violet-200/35 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_6px_14px_rgba(0,0,0,0.28)]"
+                    }`}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-b from-white/20 via-transparent to-black/30 pointer-events-none" />
+                    <div className="relative text-[10px] opacity-85">#{keyNumber}</div>
+                    <div className="relative text-xs font-semibold truncate px-1 mt-0.5">{word}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={passwordTranscript}
+                onChange={(e) => {
+                  setPasswordTranscript(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitPasswordTry()}
+                placeholder="음성 인식이 약하면 문장을 직접 입력해도 됩니다."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitPasswordTry}
+                className="px-3.5 py-2.5 rounded-xl bg-violet-500 hover:bg-violet-400 text-white text-sm font-medium"
+              >
+                해제 시도
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={beginPasswordRound}
+              className="w-full py-2.5 rounded-xl border border-violet-300/30 text-violet-100 hover:bg-violet-500/20 transition"
+            >
+              새 비밀번호
+            </button>
+          </section>
+        )}
+
+        {mode === "repair" && (
+          <section className={`relative overflow-hidden rounded-3xl border border-amber-200/50 bg-gradient-to-b from-zinc-900/80 via-slate-900/80 to-zinc-950/85 p-5 space-y-4 ${repairShake ? "animate-[shake_0.5s_linear]" : ""}`}>
+            <div
+              className="absolute inset-x-0 top-0 h-8 border-y border-black/50"
+              style={{
+                background:
+                  "repeating-linear-gradient(-45deg, #facc15 0px, #facc15 16px, #111827 16px, #111827 32px)",
+                animation: "beam-flow 3s linear infinite",
+              }}
+            />
+            <div className="absolute inset-x-0 top-10 h-2 bg-amber-400/15" />
+            <div className="absolute top-12 left-1/2 -translate-x-1/2 flex items-center gap-3">
+              <span className="text-3xl animate-[saber-flicker_0.45s_ease-in-out_infinite]">🚨</span>
+              <h2 className="text-xl font-extrabold tracking-wide text-amber-300 animate-pulse">
+                SYSTEM ERROR!!
+              </h2>
+              <span className="text-3xl animate-[saber-flicker_0.45s_ease-in-out_infinite]">🚨</span>
+            </div>
+
+            <div className="pt-20 flex items-center justify-between">
+              <h3 className="text-base font-semibold text-amber-100">고장난 AI 복구하기</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-red-300/45 bg-red-500/15 p-4 shadow-[0_0_24px_rgba(248,113,113,0.35)]">
+              <p className="text-lg font-semibold text-red-50">{repairPuzzle.broken}</p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-300/35 bg-emerald-500/10 p-4">
+              <p className="text-xs text-emerald-100/80 mb-1">MISSION</p>
+              <p className="text-sm text-emerald-50">문장을 올바르게 고쳐서 말해보세요.</p>
+              <p className="text-xs text-emerald-100/70 mt-1">시도 횟수: {repairAttempts}</p>
+            </div>
+
+            {repairRecovered && (
+              <div className="relative overflow-hidden rounded-2xl border border-emerald-300/60 bg-emerald-400/20 p-4 text-center">
+                <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-200/20 via-white/10 to-cyan-200/20 animate-pulse" />
+                  {Array.from({ length: 18 }).map((_, i) => (
+                    <span
+                      key={`repair-fx-${i}`}
+                      className="absolute text-xl"
+                      style={{
+                        left: `${(i * 17 + 9) % 100}%`,
+                        top: `${6 + (i % 3) * 12}%`,
+                        animation: `duel-stars ${0.9 + (i % 3) * 0.22}s ease-out ${i * 0.05}s`,
+                      }}
+                    >
+                      {i % 2 === 0 ? "✨" : "🛠️"}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-2xl font-black text-emerald-100">정상 복구</p>
+                <p className="text-sm text-emerald-50 mt-1">{repairPuzzle.fixed}</p>
+              </div>
+            )}
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={repairTranscript}
+                onChange={(e) => {
+                  setRepairTranscript(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitRepairTry()}
+                placeholder="고친 문장을 영어로 말하거나 입력하세요."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitRepairTry}
+                className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-medium"
+              >
+                복구 시도
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={beginRepairRound}
+              className="w-full py-2.5 rounded-xl border border-amber-300/40 text-amber-100 hover:bg-amber-500/20 transition"
+            >
+              새 문장
+            </button>
           </section>
         )}
       </main>
