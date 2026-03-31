@@ -11,6 +11,7 @@ import {
   playClick,
   playDefeatBlast,
   playExplosion,
+  playPop,
   playGoSignal,
   playFrogCroak,
   playLaserPulse,
@@ -19,14 +20,26 @@ import {
   startDuelMachineBgm,
   startFrogBgm,
   startMemoryBgm,
+  startTreasureBgm,
   startWordChainBgm,
   stopDuelMachineBgm,
   stopFrogBgm,
   stopMemoryBgm,
+  stopTreasureBgm,
   stopWordChainBgm,
 } from "@/lib/sounds";
 
-type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair" | "wordchain" | "memory" | "frog";
+type ScreenMode =
+  | "menu"
+  | "bomb"
+  | "duel"
+  | "twenty"
+  | "password"
+  | "repair"
+  | "wordchain"
+  | "memory"
+  | "frog"
+  | "treasure";
 type RoundPhase = "idle" | "countdown" | "live" | "judging" | "result";
 
 interface BombMission {
@@ -78,6 +91,11 @@ interface FrogPuzzle {
   id: string;
   ai: string;
   opposite: string;
+}
+
+interface TreasureWord {
+  id: string;
+  word: string;
 }
 
 const BOMB_MISSIONS: BombMission[] = [
@@ -617,6 +635,109 @@ const FROG_PUZZLES: FrogPuzzle[] = [
   { id: "frog-15", ai: "She can dance.", opposite: "She can't dance." },
 ];
 
+const TREASURE_WORDS: TreasureWord[] = [
+  { id: "tr-1", word: "apple" },
+  { id: "tr-2", word: "banana" },
+  { id: "tr-3", word: "orange" },
+  { id: "tr-4", word: "grape" },
+  { id: "tr-5", word: "peach" },
+  { id: "tr-6", word: "watermelon" },
+  { id: "tr-7", word: "carrot" },
+  { id: "tr-8", word: "tomato" },
+  { id: "tr-9", word: "potato" },
+  { id: "tr-10", word: "onion" },
+  { id: "tr-11", word: "bread" },
+  { id: "tr-12", word: "rice" },
+  { id: "tr-13", word: "milk" },
+  { id: "tr-14", word: "juice" },
+  { id: "tr-15", word: "water" },
+  { id: "tr-16", word: "cookie" },
+  { id: "tr-17", word: "cake" },
+  { id: "tr-18", word: "candy" },
+  { id: "tr-19", word: "pizza" },
+  { id: "tr-20", word: "noodle" },
+  { id: "tr-21", word: "school" },
+  { id: "tr-22", word: "classroom" },
+  { id: "tr-23", word: "teacher" },
+  { id: "tr-24", word: "student" },
+  { id: "tr-25", word: "friend" },
+  { id: "tr-26", word: "book" },
+  { id: "tr-27", word: "notebook" },
+  { id: "tr-28", word: "pencil" },
+  { id: "tr-29", word: "eraser" },
+  { id: "tr-30", word: "ruler" },
+  { id: "tr-31", word: "desk" },
+  { id: "tr-32", word: "chair" },
+  { id: "tr-33", word: "bag" },
+  { id: "tr-34", word: "homework" },
+  { id: "tr-35", word: "question" },
+  { id: "tr-36", word: "answer" },
+  { id: "tr-37", word: "house" },
+  { id: "tr-38", word: "room" },
+  { id: "tr-39", word: "door" },
+  { id: "tr-40", word: "window" },
+  { id: "tr-41", word: "kitchen" },
+  { id: "tr-42", word: "bedroom" },
+  { id: "tr-43", word: "bathroom" },
+  { id: "tr-44", word: "garden" },
+  { id: "tr-45", word: "family" },
+  { id: "tr-46", word: "mother" },
+  { id: "tr-47", word: "father" },
+  { id: "tr-48", word: "sister" },
+  { id: "tr-49", word: "brother" },
+  { id: "tr-50", word: "baby" },
+  { id: "tr-51", word: "dog" },
+  { id: "tr-52", word: "cat" },
+  { id: "tr-53", word: "bird" },
+  { id: "tr-54", word: "fish" },
+  { id: "tr-55", word: "rabbit" },
+  { id: "tr-56", word: "tiger" },
+  { id: "tr-57", word: "lion" },
+  { id: "tr-58", word: "elephant" },
+  { id: "tr-59", word: "monkey" },
+  { id: "tr-60", word: "horse" },
+  { id: "tr-61", word: "run" },
+  { id: "tr-62", word: "walk" },
+  { id: "tr-63", word: "jump" },
+  { id: "tr-64", word: "sit" },
+  { id: "tr-65", word: "stand" },
+  { id: "tr-66", word: "open" },
+  { id: "tr-67", word: "close" },
+  { id: "tr-68", word: "eat" },
+  { id: "tr-69", word: "drink" },
+  { id: "tr-70", word: "read" },
+  { id: "tr-71", word: "write" },
+  { id: "tr-72", word: "draw" },
+  { id: "tr-73", word: "sing" },
+  { id: "tr-74", word: "dance" },
+  { id: "tr-75", word: "play" },
+  { id: "tr-76", word: "swim" },
+  { id: "tr-77", word: "cook" },
+  { id: "tr-78", word: "wash" },
+  { id: "tr-79", word: "clean" },
+  { id: "tr-80", word: "help" },
+  { id: "tr-81", word: "happy" },
+  { id: "tr-82", word: "sad" },
+  { id: "tr-83", word: "big" },
+  { id: "tr-84", word: "small" },
+  { id: "tr-85", word: "hot" },
+  { id: "tr-86", word: "cold" },
+  { id: "tr-87", word: "sunny" },
+  { id: "tr-88", word: "rainy" },
+  { id: "tr-89", word: "cloudy" },
+  { id: "tr-90", word: "windy" },
+  { id: "tr-91", word: "morning" },
+  { id: "tr-92", word: "afternoon" },
+  { id: "tr-93", word: "evening" },
+  { id: "tr-94", word: "night" },
+  { id: "tr-95", word: "today" },
+  { id: "tr-96", word: "tomorrow" },
+  { id: "tr-97", word: "park" },
+  { id: "tr-98", word: "market" },
+  { id: "tr-99", word: "library" },
+  { id: "tr-100", word: "hospital" },
+];
+
 const FLOATING_ITEMS = ["💣", "⚡", "🔥", "💥", "⭐", "🧨", "🕒", "🎯", "🎮", "✨"];
 
 type BombMood = "idle" | "active" | "success" | "fail";
@@ -838,6 +959,14 @@ export default function GamePage() {
   const [frogShake, setFrogShake] = useState(false);
   const [frogSnakeBurst, setFrogSnakeBurst] = useState(false);
 
+  const [treasureWord, setTreasureWord] = useState<TreasureWord>(() => TREASURE_WORDS[0]);
+  const [treasureOpened, setTreasureOpened] = useState(false);
+  const [treasureInput, setTreasureInput] = useState("");
+  const [treasureMessage, setTreasureMessage] = useState("");
+  const [treasureSuccess, setTreasureSuccess] = useState(false);
+  const [treasureCoinBurst, setTreasureCoinBurst] = useState(false);
+  const [treasureFailBurst, setTreasureFailBurst] = useState(false);
+
   const activeRoundRef = useRef<"bomb" | "duel" | null>(null);
   const memoryPlaybackTokenRef = useRef(0);
   const previousModeRef = useRef<ScreenMode>("menu");
@@ -1034,6 +1163,19 @@ export default function GamePage() {
     setFrogMessage("문장을 눌러 듣고, 반대로 말해 보세요.");
   }, [resetSharedTranscript]);
 
+  const beginTreasureRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const picked = pickRandom(TREASURE_WORDS);
+    setTreasureWord(picked);
+    setTreasureOpened(false);
+    setTreasureInput("");
+    setTreasureSuccess(false);
+    setTreasureCoinBurst(false);
+    setTreasureFailBurst(false);
+    setTreasureMessage("");
+  }, [resetSharedTranscript]);
+
   const triggerWordChainCelebration = useCallback(() => {
     if (!wordChainFinished) return;
     setWordChainCelebrate(true);
@@ -1134,6 +1276,41 @@ export default function GamePage() {
     playDefeatBlast();
     playBuzzer();
   }, [frogSuccess, frogInput, liveTranscript, frogPuzzle.opposite]);
+
+  const submitTreasureTry = useCallback(() => {
+    if (!treasureOpened) {
+      setTreasureMessage("먼저 보물상자를 열어 단어를 확인해보세요.");
+      playBuzzer();
+      return;
+    }
+    const sourceText = normalizeHeardText(treasureInput) || normalizeHeardText(liveTranscript);
+    if (!sourceText) {
+      setTreasureMessage("문장을 말하거나 입력해 주세요.");
+      playBuzzer();
+      return;
+    }
+
+    const words = tokenizeSentence(sourceText);
+    const target = normalizeWord(treasureWord.word);
+    const containsTarget = words.includes(target);
+    const sentenceEnough = words.length >= 3;
+    if (containsTarget && sentenceEnough) {
+      setTreasureSuccess(true);
+      setTreasureCoinBurst(true);
+      setTreasureMessage("");
+      playVictoryBlast();
+      playTransition();
+      window.setTimeout(() => setTreasureCoinBurst(false), 1200);
+      return;
+    }
+
+    setTreasureSuccess(false);
+    setTreasureFailBurst(true);
+    setTreasureMessage("");
+    playDefeatBlast();
+    playBuzzer();
+    window.setTimeout(() => setTreasureFailBurst(false), 980);
+  }, [treasureOpened, treasureInput, liveTranscript, treasureWord.word]);
 
   const submitTwentyGuess = useCallback(() => {
     const raw = twentyGuess.trim();
@@ -1493,6 +1670,12 @@ export default function GamePage() {
   }, [liveTranscript, mode, isListening, isProcessing]);
 
   useEffect(() => {
+    if (mode !== "treasure") return;
+    if (!isListening && !isProcessing) return;
+    setTreasureInput(liveTranscript);
+  }, [liveTranscript, mode, isListening, isProcessing]);
+
+  useEffect(() => {
     if (previousModeRef.current === "memory" && mode !== "memory") {
       stopMemoryPlayback();
     }
@@ -1501,6 +1684,7 @@ export default function GamePage() {
 
   useEffect(() => {
     if (mode === "memory") {
+      stopTreasureBgm();
       stopFrogBgm();
       stopDuelMachineBgm();
       stopWordChainBgm();
@@ -1510,6 +1694,7 @@ export default function GamePage() {
       };
     }
     if (mode === "frog") {
+      stopTreasureBgm();
       stopMemoryBgm();
       stopDuelMachineBgm();
       stopWordChainBgm();
@@ -1518,7 +1703,18 @@ export default function GamePage() {
         stopFrogBgm();
       };
     }
+    if (mode === "treasure") {
+      stopFrogBgm();
+      stopMemoryBgm();
+      stopDuelMachineBgm();
+      stopWordChainBgm();
+      startTreasureBgm();
+      return () => {
+        stopTreasureBgm();
+      };
+    }
     if (mode === "wordchain" || mode === "duel" || mode === "twenty") {
+      stopTreasureBgm();
       stopFrogBgm();
       stopMemoryBgm();
       stopDuelMachineBgm();
@@ -1528,6 +1724,7 @@ export default function GamePage() {
       };
     }
     if (mode === "bomb" || mode === "password" || mode === "repair") {
+      stopTreasureBgm();
       stopFrogBgm();
       stopMemoryBgm();
       stopWordChainBgm();
@@ -1537,12 +1734,14 @@ export default function GamePage() {
       stopWordChainBgm();
       stopMemoryBgm();
       stopFrogBgm();
+      stopTreasureBgm();
     }
     return () => {
       stopDuelMachineBgm();
       stopWordChainBgm();
       stopMemoryBgm();
       stopFrogBgm();
+      stopTreasureBgm();
     };
   }, [mode]);
 
@@ -1555,6 +1754,7 @@ export default function GamePage() {
       stopWordChainBgm();
       stopMemoryBgm();
       stopFrogBgm();
+      stopTreasureBgm();
     };
   }, [stop, stopMemoryPlayback]);
 
@@ -1682,6 +1882,25 @@ export default function GamePage() {
           0% { transform: translateY(-90px) scale(0.82) rotate(-10deg); opacity: 0; }
           30% { transform: translateY(14px) scale(1.08) rotate(8deg); opacity: 1; }
           100% { transform: translateY(120px) scale(0.9) rotate(-6deg); opacity: 0; }
+        }
+        @keyframes chest-lid-open {
+          0% { transform: rotateX(0deg); }
+          100% { transform: rotateX(-62deg); }
+        }
+        @keyframes drop-fade {
+          0% { transform: translateY(-30px) scale(0.8) rotate(0deg); opacity: 0; }
+          15% { opacity: 1; }
+          100% { transform: translateY(240px) scale(1.1) rotate(18deg); opacity: 0; }
+        }
+        @keyframes chest-wobble {
+          0%, 100% { transform: rotate(0deg) scale(1); }
+          25% { transform: rotate(-2.6deg) scale(1.02); }
+          50% { transform: rotate(2.8deg) scale(1.02); }
+          75% { transform: rotate(-1.8deg) scale(1.01); }
+        }
+        @keyframes treasure-bubble-rise {
+          0% { transform: translateY(34px) scale(0.72); opacity: 0; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
         }
       `}</style>
 
@@ -1821,6 +2040,19 @@ export default function GamePage() {
               <p className="text-sm text-lime-200">Frog Challenge</p>
               <h2 className="text-xl font-bold mt-1">AI 청개구리 대결</h2>
               <p className="text-sm text-white/80 mt-2">AI 문장 반대로 말하기</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("treasure");
+                beginTreasureRound();
+              }}
+              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-amber-200">Treasure Quest</p>
+              <h2 className="text-xl font-bold mt-1">AI 보물찾기 게임</h2>
+              <p className="text-sm text-white/80 mt-2">보물 단어를 넣어 문장 만들기</p>
             </button>
           </section>
         )}
@@ -2545,6 +2777,139 @@ export default function GamePage() {
                 새 문장
               </button>
             </div>
+          </section>
+        )}
+
+        {mode === "treasure" && (
+          <section className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-b from-amber-900/55 via-yellow-950/60 to-slate-950/80 p-5 space-y-4">
+            {treasureCoinBurst && (
+              <div className="absolute inset-0 pointer-events-none z-20">
+                {Array.from({ length: 26 }).map((_, i) => (
+                  <span
+                    key={`treasure-coin-${i}`}
+                    className="absolute text-lg"
+                    style={{
+                      left: `${(i * 11 + 9) % 100}%`,
+                      top: "36%",
+                      animation: `coin-fall ${0.9 + (i % 4) * 0.22}s ease-out ${i * 0.03}s`,
+                    }}
+                  >
+                    💵
+                  </span>
+                ))}
+              </div>
+            )}
+            {treasureFailBurst && (
+              <div className="absolute inset-0 pointer-events-none z-20">
+                {Array.from({ length: 16 }).map((_, i) => (
+                  <span
+                    key={`treasure-fail-${i}`}
+                    className="absolute text-xl"
+                    style={{
+                      left: `${(i * 17 + 7) % 100}%`,
+                      top: "-14px",
+                      animation: `drop-fade ${0.95 + (i % 3) * 0.18}s ease-out ${i * 0.04}s`,
+                    }}
+                  >
+                    {i % 2 === 0 ? "💀" : "🕷️"}
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="absolute -top-12 -right-8 w-36 h-36 rounded-full bg-amber-300/15 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-10 -left-8 w-36 h-36 rounded-full bg-yellow-300/10 blur-2xl pointer-events-none" />
+
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-amber-100">AI 보물찾기 게임</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div className="relative py-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (treasureOpened) return;
+                  setTreasureOpened(true);
+                  playPop();
+                  playClick();
+                }}
+                className={`mx-auto relative block w-56 h-32 ${!treasureOpened ? "animate-[chest-wobble_1.25s_ease-in-out_infinite]" : ""}`}
+              >
+                {!treasureOpened ? (
+                  <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-lg text-amber-100/90 animate-pulse">⬇</span>
+                ) : null}
+                <div
+                  className="absolute left-1/2 -translate-x-1/2 top-2 w-48 h-14 rounded-t-[24px] border-2 border-amber-300/75 bg-gradient-to-b from-amber-300/80 to-amber-700/80 origin-bottom transition-all duration-300"
+                  style={treasureOpened ? { opacity: 0, transform: "translateX(-50%) translateY(-22px) scale(0.8)" } : undefined}
+                />
+                <div
+                  className={`absolute left-1/2 -translate-x-1/2 bottom-1 w-48 h-[4.5rem] rounded-b-[20px] border-2 transition-all duration-300 ${
+                    treasureOpened
+                      ? "border-amber-500/75 bg-gradient-to-b from-amber-800/80 to-stone-950/85"
+                      : "border-amber-300/75 bg-gradient-to-b from-amber-500/80 to-amber-900/85"
+                  }`}
+                />
+                <div className={`absolute left-1/2 -translate-x-1/2 bottom-8 w-7 h-6 rounded-md border transition-all duration-300 ${
+                  treasureOpened ? "border-amber-500/60 bg-amber-700/55" : "border-amber-100/70 bg-yellow-200/80"
+                }`} />
+                {treasureOpened ? (
+                  <div
+                    className="absolute left-1/2 -translate-x-1/2 top-9 rounded-2xl border border-yellow-100/85 bg-amber-200/80 px-4 py-2 shadow-[0_8px_20px_rgba(0,0,0,0.28)]"
+                    style={{ animation: "treasure-bubble-rise 0.32s ease-out" }}
+                  >
+                    <span className="text-lg font-black text-amber-950 tracking-wide">{treasureWord.word.toUpperCase()}</span>
+                  </div>
+                ) : null}
+              </button>
+            </div>
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={treasureInput}
+                onChange={(e) => {
+                  setTreasureInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitTreasureTry()}
+                placeholder='공개된 단어를 포함한 문장을 말하거나 입력하세요.'
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitTreasureTry}
+                className="px-3.5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 text-sm font-bold"
+              >
+                문장 제출
+              </button>
+            </div>
+
+            {treasureMessage ? (
+              <p className={`text-sm ${treasureSuccess ? "text-emerald-100" : "text-white/90"}`}>{treasureMessage}</p>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={beginTreasureRound}
+              className="w-full py-2.5 rounded-xl border border-amber-300/45 text-amber-100 hover:bg-amber-500/20 transition"
+            >
+              새 보물상자
+            </button>
           </section>
         )}
 

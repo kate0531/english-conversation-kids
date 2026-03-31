@@ -498,6 +498,10 @@ let frogBgmInterval: ReturnType<typeof setInterval> | null = null;
 let frogBgmStep = 0;
 let frogPadOsc: OscillatorNode | null = null;
 let frogPadGain: GainNode | null = null;
+let treasureBgmInterval: ReturnType<typeof setInterval> | null = null;
+let treasureBgmStep = 0;
+let treasurePadOsc: OscillatorNode | null = null;
+let treasurePadGain: GainNode | null = null;
 
 function runMachinePulse(
   ctx: AudioContext,
@@ -1076,6 +1080,116 @@ export function stopFrogBgm(): void {
     }
     const ctx = getAudioContext();
     if (ctx) stopFrogPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runTreasureTone(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.linearRampToValueAtTime(frequency * 1.12, at + duration * 0.5);
+  osc.frequency.linearRampToValueAtTime(frequency * 0.94, at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runTreasureStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  // 째깍은 유지, 멜로디는 단순하고 또렷하게 재구성
+  const bassPattern = [220, 220, 247, 220, 196, 196, 220, 247];
+  const melodyPattern = [523, 587, 659, 587, 698, 659, 587, 523];
+  const idx = step % bassPattern.length;
+
+  runTreasureTone(ctx, bassPattern[idx], 0.18, "triangle", 0.013, at);
+
+  // 째깍째깍
+  runTreasureTone(ctx, 1280, 0.032, "square", 0.0105, at + 0.012);
+
+  // 멜로디
+  runTreasureTone(ctx, melodyPattern[idx], 0.095, "sine", 0.014, at + 0.048);
+}
+
+function startTreasurePad(ctx: AudioContext): void {
+  if (treasurePadOsc || treasurePadGain) return;
+  treasurePadOsc = ctx.createOscillator();
+  treasurePadGain = ctx.createGain();
+  treasurePadOsc.type = "triangle";
+  treasurePadOsc.frequency.setValueAtTime(110, ctx.currentTime);
+  treasurePadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  treasurePadGain.gain.linearRampToValueAtTime(0.0026, ctx.currentTime + 0.08);
+  treasurePadOsc.connect(treasurePadGain);
+  treasurePadGain.connect(ctx.destination);
+  treasurePadOsc.start(ctx.currentTime);
+}
+
+function stopTreasurePad(ctx: AudioContext): void {
+  if (!treasurePadOsc || !treasurePadGain) return;
+  try {
+    treasurePadGain.gain.cancelScheduledValues(ctx.currentTime);
+    treasurePadGain.gain.setValueAtTime(treasurePadGain.gain.value, ctx.currentTime);
+    treasurePadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    treasurePadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    treasurePadOsc = null;
+    treasurePadGain = null;
+  }
+}
+
+/** 보물찾기용 어드벤처 느낌 루프 배경음 시작 */
+export function startTreasureBgm(): void {
+  try {
+    if (treasureBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (treasureBgmInterval) return;
+      treasureBgmStep = 0;
+      startTreasurePad(ctx);
+      runTreasureStep(ctx, treasureBgmStep);
+      treasureBgmStep += 1;
+      treasureBgmInterval = setInterval(() => {
+        runTreasureStep(ctx, treasureBgmStep);
+        treasureBgmStep += 1;
+      }, 255);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 보물찾기용 어드벤처 루프 배경음 정지 */
+export function stopTreasureBgm(): void {
+  try {
+    if (treasureBgmInterval) {
+      clearInterval(treasureBgmInterval);
+      treasureBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopTreasurePad(ctx);
   } catch {
     /* 무시 */
   }
