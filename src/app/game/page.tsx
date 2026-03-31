@@ -16,10 +16,14 @@ import {
   playTransition,
   playVictoryBlast,
   startDuelMachineBgm,
+  startMemoryBgm,
+  startWordChainBgm,
   stopDuelMachineBgm,
+  stopMemoryBgm,
+  stopWordChainBgm,
 } from "@/lib/sounds";
 
-type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair";
+type ScreenMode = "menu" | "bomb" | "duel" | "twenty" | "password" | "repair" | "wordchain" | "memory";
 type RoundPhase = "idle" | "countdown" | "live" | "judging" | "result";
 
 interface BombMission {
@@ -54,6 +58,17 @@ interface RepairPuzzle {
   broken: string;
   fixed: string;
   focus: "tense" | "plural" | "sv-agreement";
+}
+
+interface WordChainEntry {
+  speaker: "ai" | "me";
+  word: string;
+  turn: number;
+}
+
+interface MemoryRound {
+  id: string;
+  words: string[];
 }
 
 const BOMB_MISSIONS: BombMission[] = [
@@ -551,6 +566,30 @@ const REPAIR_PUZZLES: RepairPuzzle[] = [
   { id: "r-20", broken: "He writed three letter yesterday.", fixed: "He wrote three letters yesterday.", focus: "plural" },
 ];
 
+const WORD_CHAIN_MAX_TURN = 20;
+const WORD_CHAIN_WORDS = [
+  "apple", "eagle", "earth", "heart", "tiger", "rabbit", "turtle", "energy", "yellow", "window",
+  "whale", "ear", "robot", "teacher", "rain", "night", "table", "engine", "elbow", "water",
+  "river", "rocket", "tomato", "ocean", "nose", "eraser", "radio", "owl", "lemon", "notebook",
+  "kangaroo", "orange", "envelope", "elevator", "ring", "garden", "napkin", "number", "road", "drum",
+  "moon", "needle", "egg", "grape", "elephant", "train", "nut", "truck", "key", "yogurt",
+  "toast", "tower", "rose", "earthquake", "emerald", "dream", "map", "piano", "octopus", "sun",
+  "newspaper", "ruler", "rope", "eraser", "red", "desk", "kite", "eleven", "north", "hat",
+].map((word) => word.toLowerCase());
+
+const MEMORY_ROUNDS: MemoryRound[] = [
+  { id: "mem-1", words: ["apple", "book", "cat", "door", "egg"] },
+  { id: "mem-2", words: ["sun", "nose", "ear", "robot", "tree"] },
+  { id: "mem-3", words: ["water", "ring", "grape", "elephant", "top"] },
+  { id: "mem-4", words: ["lamp", "piano", "orange", "eraser", "rain"] },
+  { id: "mem-5", words: ["moon", "night", "table", "engine", "earth"] },
+  { id: "mem-6", words: ["key", "yogurt", "toast", "train", "nest"] },
+  { id: "mem-7", words: ["river", "rocket", "tiger", "radio", "owl"] },
+  { id: "mem-8", words: ["hat", "tomato", "ocean", "napkin", "note"] },
+  { id: "mem-9", words: ["kite", "eraser", "rose", "egg", "garden"] },
+  { id: "mem-10", words: ["drum", "map", "pencil", "lemon", "north"] },
+];
+
 const FLOATING_ITEMS = ["💣", "⚡", "🔥", "💥", "⭐", "🧨", "🕒", "🎯", "🎮", "✨"];
 
 type BombMood = "idle" | "active" | "success" | "fail";
@@ -612,6 +651,15 @@ function normalizeWord(word: string): string {
   return word.toLowerCase().replace(/[^a-z]/g, "");
 }
 
+function normalizeChainWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z]/g, "");
+}
+
+function getLastLetter(word: string): string {
+  const normalized = normalizeChainWord(word);
+  return normalized ? normalized[normalized.length - 1] : "";
+}
+
 function tokenizeSentence(text: string): string[] {
   return text
     .split(/\s+/)
@@ -670,7 +718,11 @@ function normalizeHeardText(text: string): string {
 
 export default function GamePage() {
   const router = useRouter();
-  const { speak: speakHint } = useTTS({ gender: "female" });
+  const {
+    speak: speakHint,
+    speakAndWait: speakHintAndWait,
+    stop: stopHintSpeech,
+  } = useTTS({ gender: "female" });
 
   const [mode, setMode] = useState<ScreenMode>("menu");
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -724,7 +776,34 @@ export default function GamePage() {
   const [repairShake, setRepairShake] = useState(false);
   const [repairMessage, setRepairMessage] = useState("고장 문장을 고쳐서 영어로 말해보세요.");
 
+  const [wordChainCurrent, setWordChainCurrent] = useState("apple");
+  const [wordChainInput, setWordChainInput] = useState("");
+  const [wordChainTurn, setWordChainTurn] = useState(1);
+  const [wordChainGauge, setWordChainGauge] = useState(0);
+  const [wordChainGaugeTrend, setWordChainGaugeTrend] = useState<"up" | "down" | "none">("none");
+  const [wordChainHistory, setWordChainHistory] = useState<WordChainEntry[]>([
+    { speaker: "ai", word: "apple", turn: 0 },
+  ]);
+  const [wordChainFinished, setWordChainFinished] = useState(false);
+  const [wordChainMessage, setWordChainMessage] = useState("AI 단어를 보고 끝말잇기를 시작해요!");
+  const [wordChainCelebrate, setWordChainCelebrate] = useState(false);
+
+  const [memoryRound, setMemoryRound] = useState<MemoryRound>(() => MEMORY_ROUNDS[0]);
+  const [memoryInput, setMemoryInput] = useState("");
+  const [memoryRevealed, setMemoryRevealed] = useState<boolean[]>([false, false, false, false, false]);
+  const [memoryPopped, setMemoryPopped] = useState<number | null>(null);
+  const [memoryListeningOrder, setMemoryListeningOrder] = useState(false);
+  const [memoryMessage, setMemoryMessage] = useState("다시 듣기를 눌러 순서를 기억한 뒤 첫 단어부터 말해보세요.");
+  const [memoryCompleted, setMemoryCompleted] = useState(false);
+  const [memoryReplayLeft, setMemoryReplayLeft] = useState(1);
+  const [memoryCountdown, setMemoryCountdown] = useState<3 | 2 | 1 | 0 | null>(null);
+  const [memoryActiveWordIndex, setMemoryActiveWordIndex] = useState<number | null>(null);
+  const [memoryWrongCount, setMemoryWrongCount] = useState(0);
+  const [memoryReplayGlow, setMemoryReplayGlow] = useState(false);
+  const [memoryNewRoundGlow, setMemoryNewRoundGlow] = useState(false);
+
   const activeRoundRef = useRef<"bomb" | "duel" | null>(null);
+  const memoryPlaybackTokenRef = useRef(0);
 
   const { isListening, start, stop, toggle, supported, sttError, clearSttError, isProcessing } =
     useSpeechRecognition({
@@ -738,6 +817,14 @@ export default function GamePage() {
     setLiveTranscript("");
     clearSttError();
   }, [clearSttError]);
+
+  const stopMemoryPlayback = useCallback(() => {
+    memoryPlaybackTokenRef.current += 1;
+    stopHintSpeech();
+    setMemoryListeningOrder(false);
+    setMemoryActiveWordIndex(null);
+    setMemoryCountdown(null);
+  }, [stopHintSpeech]);
 
   const beginBombRound = useCallback(() => {
     const mission = pickRandom(BOMB_MISSIONS);
@@ -813,6 +900,157 @@ export default function GamePage() {
     setRepairMessage("고장 문장을 고쳐서 영어로 말해보세요.");
   }, [resetSharedTranscript]);
 
+  const beginWordChainRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const starter = pickRandom(WORD_CHAIN_WORDS);
+    const firstLetter = getLastLetter(starter).toUpperCase();
+    setWordChainCurrent(starter);
+    setWordChainInput("");
+    setWordChainTurn(1);
+    setWordChainGauge(0);
+    setWordChainGaugeTrend("none");
+    setWordChainHistory([{ speaker: "ai", word: starter, turn: 0 }]);
+    setWordChainFinished(false);
+    setWordChainCelebrate(false);
+    setWordChainMessage(`AI 시작 단어: ${starter.toUpperCase()} / "${firstLetter}"로 시작하는 단어를 말해보세요.`);
+  }, [resetSharedTranscript]);
+
+  const playMemoryOrder = useCallback(
+    async (words: string[], token: number) => {
+      if (!words.length) return;
+      setMemoryListeningOrder(true);
+      setMemoryMessage("AI가 단어 순서를 읽는 중... 잘 듣고 5개를 한 번에 말해보세요.");
+      try {
+        for (let i = 0; i < words.length; i += 1) {
+          if (memoryPlaybackTokenRef.current !== token) return;
+          setMemoryActiveWordIndex(i);
+          await speakHintAndWait(words[i]);
+          if (memoryPlaybackTokenRef.current !== token) return;
+          await new Promise<void>((resolve) => {
+            window.setTimeout(() => resolve(), 260);
+          });
+        }
+      } finally {
+        if (memoryPlaybackTokenRef.current !== token) return;
+        setMemoryActiveWordIndex(null);
+        setMemoryListeningOrder(false);
+        setMemoryMessage("이제 5개 단어를 순서대로 한 번에 말해보세요.");
+      }
+    },
+    [speakHintAndWait]
+  );
+
+  const runMemoryCountdownAndPlay = useCallback(
+    async (words: string[], token: number) => {
+      setMemoryCountdown(3);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 650));
+      if (memoryPlaybackTokenRef.current !== token) return;
+      setMemoryCountdown(2);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 650));
+      if (memoryPlaybackTokenRef.current !== token) return;
+      setMemoryCountdown(1);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 650));
+      if (memoryPlaybackTokenRef.current !== token) return;
+      setMemoryCountdown(0);
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 520));
+      if (memoryPlaybackTokenRef.current !== token) return;
+      setMemoryCountdown(null);
+      await playMemoryOrder(words, token);
+    },
+    [playMemoryOrder]
+  );
+
+  const beginMemoryRound = useCallback(() => {
+    playClick();
+    memoryPlaybackTokenRef.current += 1;
+    stopHintSpeech();
+    resetSharedTranscript();
+    const round = pickRandom(MEMORY_ROUNDS);
+    const token = memoryPlaybackTokenRef.current;
+    setMemoryRound(round);
+    setMemoryInput("");
+    setMemoryRevealed([false, false, false, false, false]);
+    setMemoryPopped(null);
+    setMemoryCompleted(false);
+    setMemoryReplayLeft(1);
+    setMemoryActiveWordIndex(null);
+    setMemoryCountdown(null);
+    setMemoryWrongCount(0);
+    setMemoryReplayGlow(false);
+    setMemoryNewRoundGlow(false);
+    setMemoryMessage("");
+    void runMemoryCountdownAndPlay(round.words, token);
+  }, [resetSharedTranscript, runMemoryCountdownAndPlay, stopHintSpeech]);
+
+  const triggerWordChainCelebration = useCallback(() => {
+    if (!wordChainFinished) return;
+    setWordChainCelebrate(true);
+    playVictoryBlast();
+    window.setTimeout(() => setWordChainCelebrate(false), 1300);
+  }, [wordChainFinished]);
+
+  const submitMemoryWord = useCallback(() => {
+    if (memoryCompleted || memoryListeningOrder || memoryCountdown !== null) return;
+    const raw = normalizeHeardText(memoryInput) || normalizeHeardText(liveTranscript);
+
+    const spokenWords = raw
+      .trim()
+      .split(/\s+/)
+      .map((w) => normalizeWord(w))
+      .filter(Boolean);
+    if (spokenWords.length === 0) {
+      setMemoryMessage("입력된 단어가 없어요. 음성 또는 텍스트로 5개 단어를 말해 주세요.");
+      playBuzzer();
+      return;
+    }
+
+    const expectedWords = memoryRound.words.map((w) => normalizeWord(w));
+    const isExactOrder =
+      spokenWords.length >= expectedWords.length &&
+      expectedWords.every((word, idx) => spokenWords[idx] === word);
+
+    if (!isExactOrder) {
+      const nextWrongCount = memoryWrongCount + 1;
+      setMemoryWrongCount(nextWrongCount);
+      if (nextWrongCount >= 2) {
+        setMemoryRevealed([true, true, true, true, true]);
+        setMemoryCompleted(true);
+        setMemoryReplayGlow(false);
+        setMemoryNewRoundGlow(true);
+        setMemoryMessage("오답! 정답은 " + memoryRound.words.map((w) => w.toUpperCase()).join(" / ") + " 입니다.");
+      } else {
+        setMemoryReplayGlow(memoryReplayLeft > 0);
+        setMemoryNewRoundGlow(false);
+        setMemoryMessage("오답! 다시 듣기를 눌러 한 번 더 도전해보세요.");
+      }
+      playDefeatBlast();
+      playBuzzer();
+      return;
+    }
+
+    setMemoryRevealed([true, true, true, true, true]);
+    setMemoryPopped(4);
+    setMemoryInput("");
+    setLiveTranscript("");
+    playTransition();
+    window.setTimeout(() => setMemoryPopped((current) => (current === 4 ? null : current)), 320);
+    setMemoryCompleted(true);
+    setMemoryReplayGlow(false);
+    setMemoryNewRoundGlow(true);
+    setMemoryMessage("정답! 5개 단어 순서를 완벽히 기억했어요!");
+    playVictoryBlast();
+  }, [
+    memoryCompleted,
+    memoryListeningOrder,
+    memoryCountdown,
+    memoryInput,
+    liveTranscript,
+    memoryRound.words,
+    memoryWrongCount,
+    memoryReplayLeft,
+  ]);
+
   const submitTwentyGuess = useCallback(() => {
     const raw = twentyGuess.trim();
     if (!raw || twentySolved) return;
@@ -883,6 +1121,85 @@ export default function GamePage() {
     playDefeatBlast();
     window.setTimeout(() => setRepairShake(false), 520);
   }, [repairTranscript, repairRecovered, repairPuzzle.fixed]);
+
+  const submitWordChainTurn = useCallback(() => {
+    if (wordChainFinished) return;
+    const sourceRaw = normalizeHeardText(wordChainInput) || normalizeHeardText(liveTranscript);
+    const word = normalizeChainWord(sourceRaw);
+    if (!word) {
+      setWordChainMessage("단어가 비어 있어요. 음성 또는 텍스트로 단어를 입력해 주세요.");
+      setWordChainGaugeTrend("down");
+      playBuzzer();
+      window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      return;
+    }
+
+    const expectedFirst = getLastLetter(wordChainCurrent);
+    if (!expectedFirst || word[0] !== expectedFirst) {
+      setWordChainGauge((prev) => Math.max(0, prev - 7));
+      setWordChainGaugeTrend("down");
+      setWordChainMessage(`"${expectedFirst.toUpperCase()}"로 시작해야 해요. 다시 도전!`);
+      playBuzzer();
+      window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      return;
+    }
+
+    const usedWords = new Set(wordChainHistory.map((entry) => normalizeChainWord(entry.word)));
+    if (usedWords.has(word)) {
+      setWordChainGauge((prev) => Math.max(0, prev - 6));
+      setWordChainGaugeTrend("down");
+      setWordChainMessage("이미 나온 단어예요. 새로운 단어로 이어가요!");
+      playDefeatBlast();
+      window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      return;
+    }
+
+    const aiFirst = getLastLetter(word);
+    const aiCandidate =
+      WORD_CHAIN_WORDS.find((candidate) => candidate.startsWith(aiFirst) && !usedWords.has(candidate) && candidate !== word) ??
+      WORD_CHAIN_WORDS.find((candidate) => candidate.startsWith(aiFirst) && candidate !== word);
+
+    const userEntry: WordChainEntry = { speaker: "me", word, turn: wordChainTurn };
+    const updatedHistory = [...wordChainHistory, userEntry];
+    setWordChainGauge((prev) => Math.min(100, prev + 9));
+    setWordChainGaugeTrend("up");
+    playLaserPulse();
+
+    if (wordChainTurn >= WORD_CHAIN_MAX_TURN) {
+      setWordChainHistory(updatedHistory);
+      setWordChainFinished(true);
+      setWordChainMessage("20턴 클리어! 끝말잇기 미션 성공!");
+      setWordChainInput("");
+      setLiveTranscript("");
+      playVictoryBlast();
+      playTransition();
+      window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
+      return;
+    }
+
+    if (!aiCandidate) {
+      setWordChainHistory(updatedHistory);
+      setWordChainCurrent(word);
+      setWordChainFinished(true);
+      setWordChainMessage("AI가 더 이상 단어를 못 찾았어요! 당신 승리!");
+      setWordChainInput("");
+      setLiveTranscript("");
+      playVictoryBlast();
+      playTransition();
+      window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
+      return;
+    }
+
+    const aiEntry: WordChainEntry = { speaker: "ai", word: aiCandidate, turn: wordChainTurn };
+    const nextRequired = getLastLetter(aiCandidate).toUpperCase();
+    setWordChainHistory([...updatedHistory, aiEntry]);
+    setWordChainCurrent(aiCandidate);
+    setWordChainTurn((prev) => prev + 1);
+    setWordChainInput("");
+    setLiveTranscript("");
+    setWordChainMessage(`AI: ${aiCandidate.toUpperCase()} / 다음은 "${nextRequired}"로 시작!`);
+    window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
+  }, [wordChainFinished, wordChainInput, liveTranscript, wordChainCurrent, wordChainHistory, wordChainTurn]);
 
   useEffect(() => {
     if (bombPhase !== "countdown") return;
@@ -1074,13 +1391,52 @@ export default function GamePage() {
   }, [liveTranscript, mode]);
 
   useEffect(() => {
-    if (mode === "duel" || mode === "bomb" || mode === "twenty" || mode === "password" || mode === "repair") {
+    if (mode !== "wordchain") return;
+    if (!isListening && !isProcessing) return;
+    setWordChainInput(liveTranscript);
+  }, [liveTranscript, mode, isListening, isProcessing]);
+
+  useEffect(() => {
+    if (mode !== "memory") return;
+    if (!isListening && !isProcessing) return;
+    setMemoryInput(liveTranscript);
+  }, [liveTranscript, mode, isListening, isProcessing]);
+
+  useEffect(() => {
+    if (mode === "memory") return;
+    stopMemoryPlayback();
+  }, [mode, stopMemoryPlayback]);
+
+  useEffect(() => {
+    if (mode === "memory") {
+      stopDuelMachineBgm();
+      stopWordChainBgm();
+      startMemoryBgm();
+      return () => {
+        stopMemoryBgm();
+      };
+    }
+    if (mode === "wordchain" || mode === "duel" || mode === "twenty") {
+      stopMemoryBgm();
+      stopDuelMachineBgm();
+      startWordChainBgm();
+      return () => {
+        stopWordChainBgm();
+      };
+    }
+    if (mode === "bomb" || mode === "password" || mode === "repair") {
+      stopMemoryBgm();
+      stopWordChainBgm();
       startDuelMachineBgm();
     } else {
       stopDuelMachineBgm();
+      stopWordChainBgm();
+      stopMemoryBgm();
     }
     return () => {
       stopDuelMachineBgm();
+      stopWordChainBgm();
+      stopMemoryBgm();
     };
   }, [mode]);
 
@@ -1088,9 +1444,12 @@ export default function GamePage() {
     return () => {
       activeRoundRef.current = null;
       stop();
+      stopMemoryPlayback();
       stopDuelMachineBgm();
+      stopWordChainBgm();
+      stopMemoryBgm();
     };
-  }, [stop]);
+  }, [stop, stopMemoryPlayback]);
 
   const bombProgress = useMemo(
     () => Math.max(0, Math.min(100, (bombTimeLeft / Math.max(1, bombMission.seconds)) * 100)),
@@ -1101,6 +1460,7 @@ export default function GamePage() {
   const duelResultLabel =
     duelWinner === "user" ? "ME" : duelWinner === "ai" ? "AI" : "DRAW";
   const duelSaberShift = Math.max(-38, Math.min(38, (duelBeam - 50) * 1.1 + duelSpeechBoost * 14));
+  const wordChainRequired = getLastLetter(wordChainCurrent).toUpperCase();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white relative overflow-hidden">
@@ -1187,6 +1547,25 @@ export default function GamePage() {
           0%, 100% { opacity: 0.35; }
           50% { opacity: 0.78; }
         }
+        @keyframes chain-up {
+          0% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-4px) scale(1.04); }
+          100% { transform: translateY(0px) scale(1); }
+        }
+        @keyframes chain-down {
+          0% { transform: translateY(0px) scale(1); }
+          30% { transform: translateY(5px) scale(0.98); }
+          100% { transform: translateY(0px) scale(1); }
+        }
+        @keyframes clear-blink {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(34,211,238,0.35); filter: brightness(1); }
+          50% { box-shadow: 0 0 0 10px rgba(244,114,182,0.12); filter: brightness(1.2); }
+        }
+        @keyframes memory-pop {
+          0% { transform: scale(1); opacity: 1; }
+          45% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(0.88); opacity: 0.6; }
+        }
       `}</style>
 
       {FLOATING_ITEMS.map((item, idx) => (
@@ -1221,7 +1600,7 @@ export default function GamePage() {
 
       <main className="relative z-10 max-w-3xl mx-auto px-4 py-6">
         {mode === "menu" && (
-          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <button
               type="button"
               onClick={() => {
@@ -1287,12 +1666,38 @@ export default function GamePage() {
               <h2 className="text-xl font-bold mt-1">고장난 AI 복구하기</h2>
               <p className="text-sm text-white/80 mt-2">틀린 문장을 고쳐서 시스템 복구</p>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("wordchain");
+                beginWordChainRound();
+              }}
+              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-fuchsia-200">Arcade Relay</p>
+              <h2 className="text-xl font-bold mt-1">AI랑 끝말잇기</h2>
+              <p className="text-sm text-white/80 mt-2">20턴 단어 릴레이 + 상승/하락 게이지</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setMode("memory");
+                beginMemoryRound();
+              }}
+              className="rounded-2xl border border-sky-300/40 bg-sky-500/20 hover:bg-sky-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-sky-200">Smart Memory</p>
+              <h2 className="text-xl font-bold mt-1">AI랑 기억력 대결</h2>
+              <p className="text-sm text-white/80 mt-2">5개 단어 순서대로 외워서 말하기</p>
+            </button>
           </section>
         )}
 
         {mode === "bomb" && (
           <section
-            className="rounded-3xl border-2 border-pink-200/80 bg-gradient-to-b from-pink-50/95 via-rose-50/95 to-amber-50/95 p-5 space-y-4 text-gray-800 shadow-[0_10px_30px_rgba(255,182,193,0.28)] relative overflow-hidden"
+            className="rounded-3xl border border-rose-300/40 bg-gradient-to-b from-rose-900/55 via-fuchsia-950/55 to-slate-950/75 p-5 space-y-4 text-white shadow-[0_12px_34px_rgba(244,114,182,0.2)] relative overflow-hidden"
             style={bombDanger ? { animation: "danger-border 0.55s ease-in-out infinite" } : undefined}
           >
             {bombDanger ? (
@@ -1306,7 +1711,7 @@ export default function GamePage() {
               />
             ) : null}
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-extrabold text-rose-500">폭탄 돌리기</h2>
+              <h2 className="text-lg font-extrabold text-rose-200">폭탄 돌리기</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -1316,15 +1721,15 @@ export default function GamePage() {
                   activeRoundRef.current = null;
                   stop();
                 }}
-                className="text-sm text-rose-500/80 hover:text-rose-600"
+                className="text-sm text-white/70 hover:text-white"
               >
                 코너 선택으로
               </button>
             </div>
 
-            <div className="rounded-2xl border border-pink-200 bg-white/80 p-4">
-              <p className="text-xs text-rose-500/80 mb-1 font-semibold">MISSION</p>
-              <p className="font-semibold text-rose-700">{bombMission.prompt}</p>
+            <div className="rounded-2xl border border-rose-200/35 bg-rose-500/12 p-4">
+              <p className="text-xs text-rose-100/80 mb-1 font-semibold">MISSION</p>
+              <p className="font-semibold text-rose-50">{bombMission.prompt}</p>
             </div>
 
             {bombPhase === "idle" && (
@@ -1340,7 +1745,7 @@ export default function GamePage() {
             {(bombPhase === "countdown" || bombPhase === "live") && (
               <div className="text-center space-y-3">
                 <div
-                  className="text-7xl font-black tracking-tight text-rose-500"
+                  className="text-7xl font-black tracking-tight text-rose-200"
                   style={bombPhase === "live" ? { animation: "go-jitter 0.35s ease-in-out infinite" } : undefined}
                 >
                   {bombPhase === "countdown" ? bombCountdown : "GO!"}
@@ -1350,14 +1755,14 @@ export default function GamePage() {
                 </div>
                 {bombPhase === "live" && (
                   <>
-                    <div className="w-full h-3 rounded-full bg-rose-100 overflow-hidden border border-rose-200">
+                    <div className="w-full h-3 rounded-full bg-rose-950/55 overflow-hidden border border-rose-200/35">
                       <div
                         className="h-full bg-gradient-to-r from-lime-300 via-amber-300 to-rose-400 transition-all duration-700"
                         style={{ width: `${bombProgress}%` }}
                       />
                     </div>
-                    <p className="text-sm text-rose-600 font-semibold">남은 시간: {bombTimeLeft}s</p>
-                    <p className="text-sm text-rose-700">
+                    <p className="text-sm text-rose-100 font-semibold">남은 시간: {bombTimeLeft}s</p>
+                    <p className="text-sm text-rose-100/90">
                       감지된 문장 {bombDetectedSentences}개 / 단어 {bombDetectedWords}개
                     </p>
                   </>
@@ -1366,13 +1771,13 @@ export default function GamePage() {
             )}
 
             {bombPhase === "judging" && (
-              <div className="rounded-2xl bg-white/85 border border-pink-200 p-4 text-center">
-                <p className="text-lg font-semibold animate-pulse text-rose-600">AI가 발화를 듣는 중...</p>
+              <div className="rounded-2xl bg-white/10 border border-rose-200/35 p-4 text-center">
+                <p className="text-lg font-semibold animate-pulse text-rose-100">AI가 발화를 듣는 중...</p>
               </div>
             )}
 
             {bombPhase === "result" && (
-              <div className="relative overflow-hidden rounded-2xl bg-white/90 border border-pink-200 p-4 space-y-2">
+              <div className="relative overflow-hidden rounded-2xl bg-white/10 border border-rose-200/35 p-4 space-y-2">
                 {bombSuccess && (
                   <div className="absolute inset-0 pointer-events-none">
                     {Array.from({ length: 22 }).map((_, i) => (
@@ -1404,9 +1809,9 @@ export default function GamePage() {
                 <p className={`text-lg font-bold ${bombSuccess ? "text-emerald-500" : "text-amber-500"}`}>
                   {bombSuccess ? "PASS!" : "다시 한 번!"}
                 </p>
-                {!bombSuccess ? <p className="text-sm text-gray-700">{bombMessage}</p> : null}
+                {!bombSuccess ? <p className="text-sm text-rose-100/90">{bombMessage}</p> : null}
                 {!bombSuccess ? (
-                  <p className="text-sm text-gray-600">인식 결과: {bombDetectedSentences}문장 · {bombDetectedWords}단어</p>
+                  <p className="text-sm text-rose-100/80">인식 결과: {bombDetectedSentences}문장 · {bombDetectedWords}단어</p>
                 ) : null}
                 <button
                   type="button"
@@ -1419,7 +1824,7 @@ export default function GamePage() {
             )}
 
             {sttError ? (
-              <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-xl px-3 py-2">
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-xl px-3 py-2">
                 {sttError}
               </p>
             ) : null}
@@ -1432,7 +1837,7 @@ export default function GamePage() {
                   setLiveTranscript(e.target.value);
                 }}
                 placeholder="음성이 잘 안 되면 여기에 영어로 직접 입력해도 됩니다."
-                className="flex-1 rounded-xl bg-white border border-pink-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-300/60"
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-rose-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="pink" />
             </div>
@@ -1611,6 +2016,7 @@ export default function GamePage() {
                 type="button"
                 onClick={() => {
                   playClick();
+                  stopMemoryPlayback();
                   setMode("menu");
                 }}
                 className="text-sm text-white/70 hover:text-white"
@@ -1895,6 +2301,259 @@ export default function GamePage() {
             >
               새 비밀번호
             </button>
+          </section>
+        )}
+
+        {mode === "memory" && (
+          <section className="relative overflow-hidden rounded-3xl border border-sky-300/40 bg-gradient-to-b from-slate-900/90 via-sky-950/70 to-black/85 p-5 space-y-4">
+            <div className="absolute inset-0 pointer-events-none opacity-35" style={{ background: "linear-gradient(180deg, rgba(34,211,238,0.04) 0%, rgba(0,0,0,0) 20%)" }} />
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-sky-100">AI랑 기억력 대결</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-sky-200/35 bg-sky-500/10 p-4">
+              <div className="flex items-center justify-between text-xs text-sky-100/80">
+                <span>SMART MEMORY SEQUENCE</span>
+              </div>
+              <p className="mt-2 text-sm text-white/90">{memoryMessage}</p>
+              {memoryCountdown !== null ? (
+                <div className="mt-3 text-center">
+                  <span className="inline-flex min-w-20 justify-center rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-5 py-2 text-4xl font-black text-cyan-50 animate-pulse shadow-[0_0_24px_rgba(34,211,238,0.55)]">
+                    {memoryCountdown === 0 ? "GO!" : String(memoryCountdown)}
+                  </span>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="grid grid-cols-5 gap-3">
+              {memoryRound.words.map((word, idx) => (
+                <div
+                  key={`memory-bubble-${memoryRound.id}-${idx}`}
+                  className={`relative min-h-[88px] rounded-2xl border p-4 text-center transition ${
+                    memoryRevealed[idx]
+                      ? "border-emerald-200/70 bg-emerald-400/25 text-emerald-50 shadow-[0_10px_18px_rgba(16,185,129,0.28)]"
+                      : "border-sky-200/45 bg-slate-900/70 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.26),0_12px_18px_rgba(2,6,23,0.4)]"
+                  }`}
+                  style={
+                    memoryPopped === idx
+                      ? { animation: "memory-pop 0.3s ease-out" }
+                      : memoryActiveWordIndex === idx
+                      ? { boxShadow: "0 0 0 2px rgba(34,211,238,0.55), 0 0 22px rgba(56,189,248,0.52)" }
+                      : undefined
+                  }
+                >
+                  <div className="text-sm font-extrabold opacity-95 tracking-wide">#{idx + 1}</div>
+                  <div className="mt-2 text-xl font-black tracking-wide">
+                    {memoryRevealed[idx] ? word.toUpperCase() : memoryReplayLeft > 0 ? "❤" : "?"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={memoryInput}
+                onChange={(e) => {
+                  setMemoryInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitMemoryWord()}
+                placeholder="음성 인식이 약하면 단어를 직접 입력해도 됩니다."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitMemoryWord}
+                disabled={memoryListeningOrder || memoryCompleted || memoryCountdown !== null}
+                className="px-3.5 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-white text-sm font-medium disabled:opacity-50"
+              >
+                단어 확인
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (memoryReplayLeft <= 0) return;
+                  memoryPlaybackTokenRef.current += 1;
+                  const token = memoryPlaybackTokenRef.current;
+                  setMemoryReplayLeft(0);
+                  setMemoryReplayGlow(false);
+                  void playMemoryOrder(memoryRound.words, token);
+                }}
+                disabled={memoryListeningOrder || memoryReplayLeft <= 0 || memoryCountdown !== null}
+                className={`py-2.5 rounded-xl border border-sky-300/45 text-sky-100 hover:bg-sky-500/20 transition disabled:opacity-50 ${
+                  memoryReplayGlow ? "animate-pulse shadow-[0_0_24px_rgba(56,189,248,0.62)]" : ""
+                }`}
+              >
+                {memoryListeningOrder ? "재생 중..." : `다시 듣기 ${memoryReplayLeft > 0 ? "❤" : ""}`}
+              </button>
+              <button
+                type="button"
+                onClick={beginMemoryRound}
+                className={`py-2.5 rounded-xl border border-cyan-300/50 text-cyan-100 hover:bg-cyan-500/20 transition shadow-[0_0_16px_rgba(34,211,238,0.42)] hover:shadow-[0_0_24px_rgba(34,211,238,0.65)] ${
+                  memoryNewRoundGlow ? "animate-pulse shadow-[0_0_28px_rgba(34,211,238,0.78)]" : ""
+                }`}
+              >
+                새 라운드
+              </button>
+            </div>
+          </section>
+        )}
+
+        {mode === "wordchain" && (
+          <section className="relative overflow-hidden rounded-3xl border border-fuchsia-300/40 bg-gradient-to-b from-fuchsia-900/55 via-indigo-950/60 to-slate-950/70 p-5 space-y-4">
+            {wordChainCelebrate && (
+              <div className="absolute inset-0 pointer-events-none z-20">
+                {Array.from({ length: 28 }).map((_, i) => (
+                  <span
+                    key={`wordchain-confetti-${i}`}
+                    className="absolute w-2.5 h-4 rounded-sm"
+                    style={{
+                      left: `${(i * 11 + 7) % 100}%`,
+                      top: "-12px",
+                      background:
+                        i % 5 === 0 ? "#f472b6" : i % 5 === 1 ? "#22d3ee" : i % 5 === 2 ? "#facc15" : i % 5 === 3 ? "#4ade80" : "#c084fc",
+                      animation: `confetti-drop ${0.95 + (i % 5) * 0.22}s ease-out ${i * 0.03}s`,
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="absolute -top-14 -right-10 w-40 h-40 rounded-full bg-fuchsia-300/15 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-10 w-40 h-40 rounded-full bg-cyan-300/10 blur-2xl pointer-events-none" />
+
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-fuchsia-100">AI랑 끝말잇기</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            <div className="grid grid-cols-[80px_1fr] gap-3">
+              <div className="rounded-2xl border border-fuchsia-200/35 bg-black/25 p-2 flex items-end justify-center">
+                <div
+                  className={`relative w-8 h-40 rounded-full border border-fuchsia-200/40 bg-fuchsia-950/40 overflow-hidden ${
+                    wordChainGaugeTrend === "up"
+                      ? "animate-[chain-up_0.3s_ease-out]"
+                      : wordChainGaugeTrend === "down"
+                      ? "animate-[chain-down_0.3s_ease-out]"
+                      : ""
+                  }`}
+                >
+                  <div
+                    className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-500 via-cyan-300 to-emerald-300 transition-all duration-300"
+                    style={{ height: `${wordChainGauge}%` }}
+                  />
+                  <div className="absolute -right-10 top-1 text-[10px] text-fuchsia-100/80">MAX</div>
+                  <div className="absolute -right-10 bottom-1 text-[10px] text-fuchsia-100/80">MIN</div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="rounded-2xl border border-fuchsia-200/40 bg-fuchsia-500/15 p-4">
+                  <div className="flex items-center justify-between text-xs text-fuchsia-100/80">
+                    <span>TURN {wordChainTurn}/{WORD_CHAIN_MAX_TURN}</span>
+                    <span>게이지 {wordChainGauge}%</span>
+                  </div>
+                  <p className="mt-2 text-sm text-white/90">{wordChainMessage}</p>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-200/35 bg-cyan-500/10 p-4">
+                  <p className="text-xs text-cyan-100/80">현재 기준 단어</p>
+                  <p className="text-2xl font-black text-cyan-100 tracking-wide">{wordChainCurrent.toUpperCase()}</p>
+                  <p className="text-sm text-cyan-50/90 mt-1">다음 단어 시작 글자: <span className="font-bold text-emerald-300">{wordChainRequired}</span></p>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/15 bg-white/5 p-3">
+              <div className="flex flex-wrap gap-2">
+                {wordChainHistory.slice(-10).map((entry, idx) => (
+                  <span
+                    key={`chain-${entry.turn}-${idx}-${entry.word}`}
+                    className={`px-2.5 py-1 rounded-full text-xs border ${
+                      entry.speaker === "me"
+                        ? "bg-emerald-400/20 border-emerald-200/50 text-emerald-100"
+                        : "bg-fuchsia-400/20 border-fuchsia-200/50 text-fuchsia-100"
+                    }`}
+                  >
+                    {entry.speaker === "me" ? "ME" : "AI"} · {entry.word}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={wordChainInput}
+                onChange={(e) => {
+                  setWordChainInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitWordChainTurn()}
+                placeholder="끝 글자로 시작하는 영어 단어를 말하거나 입력하세요."
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitWordChainTurn}
+                className="px-3.5 py-2.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white text-sm font-medium"
+              >
+                단어 제출
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={beginWordChainRound}
+                className="py-2.5 rounded-xl border border-fuchsia-300/40 text-fuchsia-100 hover:bg-fuchsia-500/20 transition"
+              >
+                새 게임
+              </button>
+              <button
+                type="button"
+                onClick={wordChainFinished ? triggerWordChainCelebration : submitWordChainTurn}
+                className={`py-2.5 rounded-xl border border-cyan-300/40 text-cyan-100 hover:bg-cyan-500/20 transition ${
+                  wordChainFinished ? "animate-[clear-blink_0.9s_ease-in-out_infinite] bg-cyan-400/20" : ""
+                }`}
+              >
+                {wordChainFinished ? "클리어 완료" : "턴 진행"}
+              </button>
+            </div>
           </section>
         )}
 

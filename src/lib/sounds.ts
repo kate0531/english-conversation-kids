@@ -486,6 +486,14 @@ let bombBgmInterval: ReturnType<typeof setInterval> | null = null;
 let bombBgmStep = 0;
 let bombPadOsc: OscillatorNode | null = null;
 let bombPadGain: GainNode | null = null;
+let wordChainBgmInterval: ReturnType<typeof setInterval> | null = null;
+let wordChainBgmStep = 0;
+let wordChainPadOsc: OscillatorNode | null = null;
+let wordChainPadGain: GainNode | null = null;
+let memoryBgmInterval: ReturnType<typeof setInterval> | null = null;
+let memoryBgmStep = 0;
+let memoryPadOsc: OscillatorNode | null = null;
+let memoryPadGain: GainNode | null = null;
 
 function runMachinePulse(
   ctx: AudioContext,
@@ -692,6 +700,219 @@ export function stopBombBgm(): void {
     }
     const ctx = getAudioContext();
     if (ctx) stopBombPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runWordChainTone(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.linearRampToValueAtTime(frequency * 1.04, at + duration * 0.55);
+  osc.frequency.linearRampToValueAtTime(frequency * 0.98, at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runWordChainLoopStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  const melodyPattern = [523, 659, 784, 880, 784, 988, 1046, 1175];
+  const chordPattern = [262, 330, 392, 330, 294, 370, 440, 370];
+  const idx = step % melodyPattern.length;
+  const melody = melodyPattern[idx];
+  const chord = chordPattern[idx];
+  runWordChainTone(ctx, chord, 0.15, "triangle", 0.012, at);
+  runWordChainTone(ctx, melody, 0.1, "square", 0.02, at + 0.03);
+  if (idx % 2 === 0) runWordChainTone(ctx, melody * 2, 0.07, "sine", 0.012, at + 0.08);
+}
+
+function startWordChainPad(ctx: AudioContext): void {
+  if (wordChainPadOsc || wordChainPadGain) return;
+  wordChainPadOsc = ctx.createOscillator();
+  wordChainPadGain = ctx.createGain();
+  wordChainPadOsc.type = "sine";
+  wordChainPadOsc.frequency.setValueAtTime(196, ctx.currentTime);
+  wordChainPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  wordChainPadGain.gain.linearRampToValueAtTime(0.003, ctx.currentTime + 0.08);
+  wordChainPadOsc.connect(wordChainPadGain);
+  wordChainPadGain.connect(ctx.destination);
+  wordChainPadOsc.start(ctx.currentTime);
+}
+
+function stopWordChainPad(ctx: AudioContext): void {
+  if (!wordChainPadOsc || !wordChainPadGain) return;
+  try {
+    wordChainPadGain.gain.cancelScheduledValues(ctx.currentTime);
+    wordChainPadGain.gain.setValueAtTime(wordChainPadGain.gain.value, ctx.currentTime);
+    wordChainPadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    wordChainPadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    wordChainPadOsc = null;
+    wordChainPadGain = null;
+  }
+}
+
+/** 끝말잇기용 신나는 아케이드 루프 배경음 시작 */
+export function startWordChainBgm(): void {
+  try {
+    if (wordChainBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (wordChainBgmInterval) return;
+      wordChainBgmStep = 0;
+      startWordChainPad(ctx);
+      runWordChainLoopStep(ctx, wordChainBgmStep);
+      wordChainBgmStep += 1;
+      wordChainBgmInterval = setInterval(() => {
+        runWordChainLoopStep(ctx, wordChainBgmStep);
+        wordChainBgmStep += 1;
+      }, 210);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 끝말잇기용 신나는 아케이드 루프 배경음 정지 */
+export function stopWordChainBgm(): void {
+  try {
+    if (wordChainBgmInterval) {
+      clearInterval(wordChainBgmInterval);
+      wordChainBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopWordChainPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+function runMemoryTone(
+  ctx: AudioContext,
+  frequency: number,
+  duration: number,
+  type: OscillatorType,
+  volume: number,
+  at: number
+): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(frequency, at);
+  osc.frequency.linearRampToValueAtTime(frequency * 1.02, at + duration * 0.45);
+  osc.frequency.linearRampToValueAtTime(frequency * 0.96, at + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(volume, at + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
+  osc.start(at);
+  osc.stop(at + duration);
+}
+
+function runMemoryLoopStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.005;
+  const leadPattern = [392, 784, 523, 1046, 659, 1318, 587, 1175];
+  const bassPattern = [110, 165, 123, 196, 146, 220, 130, 196];
+  const idx = step % leadPattern.length;
+  const lead = leadPattern[idx];
+  const bass = bassPattern[idx];
+  runMemoryTone(ctx, bass, 0.2, "sawtooth", 0.013, at);
+  runMemoryTone(ctx, lead, 0.09, "triangle", 0.02, at + 0.03);
+  runMemoryTone(ctx, lead * 1.5, 0.06, "sine", 0.01, at + 0.1);
+  if (idx % 2 === 0) runMemoryTone(ctx, lead * 0.75, 0.05, "sawtooth", 0.008, at + 0.13);
+}
+
+function startMemoryPad(ctx: AudioContext): void {
+  if (memoryPadOsc || memoryPadGain) return;
+  memoryPadOsc = ctx.createOscillator();
+  memoryPadGain = ctx.createGain();
+  memoryPadOsc.type = "sawtooth";
+  memoryPadOsc.frequency.setValueAtTime(98, ctx.currentTime);
+  memoryPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  memoryPadGain.gain.linearRampToValueAtTime(0.0015, ctx.currentTime + 0.08);
+  memoryPadOsc.connect(memoryPadGain);
+  memoryPadGain.connect(ctx.destination);
+  memoryPadOsc.start(ctx.currentTime);
+}
+
+function stopMemoryPad(ctx: AudioContext): void {
+  if (!memoryPadOsc || !memoryPadGain) return;
+  try {
+    memoryPadGain.gain.cancelScheduledValues(ctx.currentTime);
+    memoryPadGain.gain.setValueAtTime(memoryPadGain.gain.value, ctx.currentTime);
+    memoryPadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    memoryPadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    memoryPadOsc = null;
+    memoryPadGain = null;
+  }
+}
+
+/** 메모리 게임용 디지털 아르페지오 루프 배경음 시작 */
+export function startMemoryBgm(): void {
+  try {
+    if (memoryBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const startLoop = () => {
+      if (memoryBgmInterval) return;
+      memoryBgmStep = 0;
+      startMemoryPad(ctx);
+      runMemoryLoopStep(ctx, memoryBgmStep);
+      memoryBgmStep += 1;
+      memoryBgmInterval = setInterval(() => {
+        runMemoryLoopStep(ctx, memoryBgmStep);
+        memoryBgmStep += 1;
+      }, 220);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 메모리 게임용 디지털 아르페지오 루프 배경음 정지 */
+export function stopMemoryBgm(): void {
+  try {
+    if (memoryBgmInterval) {
+      clearInterval(memoryBgmInterval);
+      memoryBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopMemoryPad(ctx);
   } catch {
     /* 무시 */
   }
