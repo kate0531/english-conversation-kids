@@ -17,16 +17,12 @@ import {
   playLaserPulse,
   playTransition,
   playVictoryBlast,
-  startDuelMachineBgm,
-  startFrogBgm,
-  startMemoryBgm,
-  startTreasureBgm,
-  startWordChainBgm,
-  stopDuelMachineBgm,
-  stopFrogBgm,
-  stopMemoryBgm,
-  stopTreasureBgm,
-  stopWordChainBgm,
+  setBgmDucked,
+  startBgmForGameMode,
+  startRhythmDanceBgm,
+  stopAllCornerBgm,
+  stopRhythmDanceBgm,
+  unlockAudioContext,
 } from "@/lib/sounds";
 
 type ScreenMode =
@@ -39,7 +35,10 @@ type ScreenMode =
   | "wordchain"
   | "memory"
   | "frog"
-  | "treasure";
+  | "treasure"
+  | "alphabet"
+  | "tongue"
+  | "rhythm";
 type RoundPhase = "idle" | "countdown" | "live" | "judging" | "result";
 
 interface BombMission {
@@ -96,6 +95,17 @@ interface FrogPuzzle {
 interface TreasureWord {
   id: string;
   word: string;
+}
+
+interface RhythmSentence {
+  id: string;
+  full: string;
+  chunks: [string, string, string];
+}
+
+interface TongueLine {
+  id: string;
+  text: string;
 }
 
 const BOMB_MISSIONS: BombMission[] = [
@@ -738,7 +748,62 @@ const TREASURE_WORDS: TreasureWord[] = [
   { id: "tr-100", word: "hospital" },
 ];
 
+/** 알파벳 코너: 단어당 제한 시간(초) */
+const ALPHA_ROUND_SEC = 12;
+
+const RHYTHM_SENTENCES: RhythmSentence[] = [
+  { id: "rh-1", full: "I'm going to the airport.", chunks: ["I'm going", "to the", "airport."] },
+  { id: "rh-2", full: "I can talk about him all day.", chunks: ["I can", "talk about him", "all day."] },
+  { id: "rh-3", full: "We should leave right now.", chunks: ["We should", "leave", "right now."] },
+  { id: "rh-4", full: "She wants to learn English.", chunks: ["She wants", "to learn", "English."] },
+  { id: "rh-5", full: "They are playing in the park.", chunks: ["They are", "playing in", "the park."] },
+  { id: "rh-6", full: "My brother likes pizza.", chunks: ["My brother", "likes", "pizza."] },
+  { id: "rh-7", full: "I need a glass of water.", chunks: ["I need", "a glass", "of water."] },
+  { id: "rh-8", full: "Let's meet after school.", chunks: ["Let's", "meet after", "school."] },
+  { id: "rh-9", full: "The cat is under the table.", chunks: ["The cat", "is under", "the table."] },
+  { id: "rh-10", full: "I will call you later.", chunks: ["I will", "call you", "later."] },
+  { id: "rh-11", full: "This music makes me dance.", chunks: ["This music", "makes me", "dance."] },
+  { id: "rh-12", full: "Please open the window.", chunks: ["Please", "open the", "window."] },
+];
+
+const TONGUE_LINES: TongueLine[] = [
+  { id: "tg-1", text: "Good blood, bad blood." },
+  { id: "tg-2", text: "Black bug, big bug." },
+  { id: "tg-3", text: "Blue glue, green glue." },
+  { id: "tg-4", text: "Red truck, yellow truck." },
+  { id: "tg-5", text: "Fresh fried fish." },
+  { id: "tg-6", text: "Big black bear." },
+  { id: "tg-7", text: "Sheep sleep soundly." },
+  { id: "tg-8", text: "Fast fox fixes fences." },
+  { id: "tg-9", text: "Smart snakes slide slowly." },
+  { id: "tg-10", text: "Tiny turtles turn twice." },
+  { id: "tg-11", text: "Clean cream, cool cream." },
+  { id: "tg-12", text: "Short shirt, sharp shirt." },
+  { id: "tg-13", text: "Thin thumb, thick thumb." },
+  { id: "tg-14", text: "Top chop, chip chop." },
+  { id: "tg-15", text: "Ten tiny tap dancers." },
+  { id: "tg-16", text: "Brave brown birds blink." },
+  { id: "tg-17", text: "Lucky ducks drink lemonade." },
+  { id: "tg-18", text: "Wild wolves whistle well." },
+  { id: "tg-19", text: "Shiny shoes, shiny socks." },
+  { id: "tg-20", text: "Please play purple piano." },
+  { id: "tg-21", text: "Six soft sea stars." },
+  { id: "tg-22", text: "Best breakfast brings bright brains." },
+  { id: "tg-23", text: "Good game, great goal." },
+  { id: "tg-24", text: "Tom takes tiny tacos." },
+  { id: "tg-25", text: "Jack jumps, Jill jogs." },
+  { id: "tg-26", text: "Big bag, pink bag." },
+  { id: "tg-27", text: "Cold coffee, hot cocoa." },
+  { id: "tg-28", text: "Silver spoon, simple soup." },
+  { id: "tg-29", text: "Quick queen quietly quizzes." },
+  { id: "tg-30", text: "Round road, right road." },
+  { id: "tg-31", text: "Sweet swing, swift swing." },
+  { id: "tg-32", text: "Great green grapes grow." },
+];
+
 const FLOATING_ITEMS = ["💣", "⚡", "🔥", "💥", "⭐", "🧨", "🕒", "🎯", "🎮", "✨"];
+
+type RhythmPhase = "countdown" | "demo" | "play" | "merging" | "cleared" | "tier2_ment";
 
 type BombMood = "idle" | "active" | "success" | "fail";
 type TwentyHintMode = "keywords" | "sentences";
@@ -967,8 +1032,42 @@ export default function GamePage() {
   const [treasureCoinBurst, setTreasureCoinBurst] = useState(false);
   const [treasureFailBurst, setTreasureFailBurst] = useState(false);
 
+  const [alphaLetter, setAlphaLetter] = useState<string | null>(null);
+  const [alphaRolling, setAlphaRolling] = useState(false);
+  const [alphaRollFace, setAlphaRollFace] = useState("?");
+  const [alphaWords, setAlphaWords] = useState<string[]>([]);
+  const [alphaInput, setAlphaInput] = useState("");
+  const [alphaMessage, setAlphaMessage] = useState("");
+  const [alphaTimeLeft, setAlphaTimeLeft] = useState(ALPHA_ROUND_SEC);
+  const [alphaExpired, setAlphaExpired] = useState(false);
+  const [alphaTimerKey, setAlphaTimerKey] = useState(0);
+  const [alphaShake, setAlphaShake] = useState(false);
+  const [alphaDiceBurst, setAlphaDiceBurst] = useState(false);
+
+  const [tongueLine, setTongueLine] = useState<TongueLine>(() => TONGUE_LINES[0]);
+  const [tongueInput, setTongueInput] = useState("");
+  const [tongueAttempts, setTongueAttempts] = useState(0);
+  const [tongueSuccess, setTongueSuccess] = useState(false);
+  const [tongueShake, setTongueShake] = useState(false);
+  const [tongueCrownBurst, setTongueCrownBurst] = useState(false);
+
+  const [rhythmLine, setRhythmLine] = useState<RhythmSentence>(() => RHYTHM_SENTENCES[0]);
+  const [rhythmPhase, setRhythmPhase] = useState<RhythmPhase>("countdown");
+  const [rhythmTier, setRhythmTier] = useState<1 | 2>(1);
+  const [rhythmCountdownLabel, setRhythmCountdownLabel] = useState<null | "3" | "2" | "1" | "go">(
+    null
+  );
+  const [rhythmDemoChunk, setRhythmDemoChunk] = useState<null | 0 | 1 | 2>(null);
+  const [rhythmManualChunk, setRhythmManualChunk] = useState<null | 0 | 1 | 2>(null);
+  const [rhythmInput, setRhythmInput] = useState("");
+  const [rhythmClearFloatKey, setRhythmClearFloatKey] = useState(0);
+  const [rhythmClearFlash, setRhythmClearFlash] = useState(false);
+
   const activeRoundRef = useRef<"bomb" | "duel" | null>(null);
   const memoryPlaybackTokenRef = useRef(0);
+  const rhythmPlaybackTokenRef = useRef(0);
+  const rhythmManualChunkClearRef = useRef<number | null>(null);
+  const alphaRollTimerRef = useRef<number | null>(null);
   const previousModeRef = useRef<ScreenMode>("menu");
 
   const { isListening, start, stop, toggle, supported, sttError, clearSttError, isProcessing } =
@@ -1175,6 +1274,229 @@ export default function GamePage() {
     setTreasureFailBurst(false);
     setTreasureMessage("");
   }, [resetSharedTranscript]);
+
+  const runRhythmCountdownDemoAndUnlock = useCallback(
+    async (line: RhythmSentence, token: number, opts?: { fast?: boolean }) => {
+      unlockAudioContext();
+      setRhythmPhase("countdown");
+      const fast = !!opts?.fast;
+      const seq: Array<"3" | "2" | "1" | "go"> = ["3", "2", "1", "go"];
+      for (const label of seq) {
+        if (rhythmPlaybackTokenRef.current !== token) return;
+        setRhythmCountdownLabel(label);
+        if (label === "go") {
+          playGoSignal();
+          await new Promise<void>((r) => window.setTimeout(r, 420));
+        } else {
+          await new Promise<void>((r) => window.setTimeout(r, 680));
+        }
+      }
+      if (rhythmPlaybackTokenRef.current !== token) return;
+      setRhythmCountdownLabel(null);
+      stopRhythmDanceBgm();
+      startRhythmDanceBgm({ fast });
+      setRhythmPhase("demo");
+      for (let i = 0; i < 3; i += 1) {
+        if (rhythmPlaybackTokenRef.current !== token) return;
+        setRhythmDemoChunk(i as 0 | 1 | 2);
+        await speakHintAndWait(line.chunks[i], { fast });
+      }
+      if (rhythmPlaybackTokenRef.current !== token) return;
+      setRhythmDemoChunk(null);
+      setRhythmPhase("play");
+    },
+    [speakHintAndWait]
+  );
+
+  const beginRhythmRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    stopRhythmDanceBgm();
+    rhythmPlaybackTokenRef.current += 1;
+    const token = rhythmPlaybackTokenRef.current;
+    const line = pickRandom(RHYTHM_SENTENCES);
+    setRhythmLine(line);
+    setRhythmTier(1);
+    setRhythmPhase("countdown");
+    setRhythmDemoChunk(null);
+    setRhythmManualChunk(null);
+    setRhythmCountdownLabel(null);
+    setRhythmInput("");
+    setRhythmClearFlash(false);
+    void runRhythmCountdownDemoAndUnlock(line, token, { fast: false });
+  }, [resetSharedTranscript, runRhythmCountdownDemoAndUnlock]);
+
+  const submitRhythmTry = useCallback(() => {
+    if (rhythmPhase !== "play") return;
+    const spoken = normalizeHeardText(rhythmInput) || normalizeHeardText(liveTranscript);
+    if (!spoken.trim()) {
+      playBuzzer();
+      return;
+    }
+    if (!isSentenceMatch(spoken, rhythmLine.full)) {
+      playBuzzer();
+      return;
+    }
+    playPop();
+    if (rhythmTier === 1) {
+      stopRhythmDanceBgm();
+      rhythmPlaybackTokenRef.current += 1;
+      const tierToken = rhythmPlaybackTokenRef.current;
+      setRhythmPhase("tier2_ment");
+      setRhythmTier(2);
+      window.setTimeout(() => {
+        if (rhythmPlaybackTokenRef.current !== tierToken) return;
+        void runRhythmCountdownDemoAndUnlock(rhythmLine, tierToken, { fast: true });
+      }, 1000);
+    } else {
+      rhythmPlaybackTokenRef.current += 1;
+      stopRhythmDanceBgm();
+      playTransition();
+      setRhythmPhase("merging");
+      window.setTimeout(() => {
+        setRhythmPhase("cleared");
+        setRhythmClearFlash(true);
+        window.setTimeout(() => setRhythmClearFlash(false), 520);
+        setRhythmClearFloatKey((k) => k + 1);
+      }, 850);
+    }
+  }, [rhythmPhase, rhythmTier, rhythmLine, rhythmInput, liveTranscript, runRhythmCountdownDemoAndUnlock]);
+
+  const replayRhythmChunk = useCallback(
+    (idx: 0 | 1 | 2) => {
+      if (rhythmPhase !== "play") return;
+      playClick();
+      setRhythmManualChunk(idx);
+      if (rhythmManualChunkClearRef.current) window.clearTimeout(rhythmManualChunkClearRef.current);
+      const fast = rhythmTier === 2;
+      speakHint(rhythmLine.chunks[idx], { fast });
+      const tid = window.setTimeout(() => {
+        setRhythmManualChunk(null);
+        rhythmManualChunkClearRef.current = null;
+      }, 2600);
+      rhythmManualChunkClearRef.current = tid;
+    },
+    [rhythmPhase, rhythmLine, rhythmTier, speakHint]
+  );
+
+  const beginAlphaRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    if (alphaRollTimerRef.current) {
+      clearInterval(alphaRollTimerRef.current);
+      alphaRollTimerRef.current = null;
+    }
+    setAlphaLetter(null);
+    setAlphaRolling(false);
+    setAlphaRollFace("?");
+    setAlphaWords([]);
+    setAlphaInput("");
+    setAlphaExpired(false);
+    setAlphaTimeLeft(ALPHA_ROUND_SEC);
+    setAlphaTimerKey((k) => k + 1);
+    setAlphaMessage("");
+    setAlphaShake(false);
+    setAlphaDiceBurst(false);
+  }, [resetSharedTranscript]);
+
+  const rollAlphaDice = useCallback(() => {
+    if (alphaRolling) return;
+    playClick();
+    unlockAudioContext();
+    setAlphaExpired(false);
+    setAlphaLetter(null);
+    setAlphaMessage("");
+    setAlphaRolling(true);
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let step = 0;
+    if (alphaRollTimerRef.current) clearInterval(alphaRollTimerRef.current);
+    alphaRollTimerRef.current = window.setInterval(() => {
+      step += 1;
+      setAlphaRollFace(letters[step % 26]);
+      if (step >= 22) {
+        if (alphaRollTimerRef.current) {
+          clearInterval(alphaRollTimerRef.current);
+          alphaRollTimerRef.current = null;
+        }
+        const picked = letters[Math.floor(Math.random() * 26)];
+        setAlphaLetter(picked);
+        setAlphaRollFace(picked);
+        setAlphaRolling(false);
+        setAlphaTimeLeft(ALPHA_ROUND_SEC);
+        setAlphaTimerKey((k) => k + 1);
+        setAlphaMessage(`"${picked}"로 시작하는 영어 단어를 말해 보세요!`);
+        setAlphaDiceBurst(false);
+      }
+    }, 72);
+  }, [alphaRolling]);
+
+  const submitAlphaWord = useCallback(() => {
+    if (!alphaLetter || alphaRolling || alphaExpired) return;
+    const raw = normalizeHeardText(alphaInput) || normalizeHeardText(liveTranscript);
+    const words = tokenizeSentence(raw);
+    const w = words[0];
+    if (!w) {
+      playBuzzer();
+      setAlphaShake(true);
+      window.setTimeout(() => setAlphaShake(false), 500);
+      setAlphaMessage("단어를 말하거나 입력해 주세요.");
+      return;
+    }
+    const need = alphaLetter.toLowerCase();
+    if (w[0] !== need) {
+      playBuzzer();
+      setAlphaShake(true);
+      window.setTimeout(() => setAlphaShake(false), 500);
+      setAlphaMessage(`"${alphaLetter}"로 시작해야 해요. 다시 도전!`);
+      return;
+    }
+    if (alphaWords.includes(w)) {
+      playBuzzer();
+      setAlphaShake(true);
+      window.setTimeout(() => setAlphaShake(false), 500);
+      setAlphaMessage("이미 말한 단어예요. 새로운 단어로!");
+      return;
+    }
+    playPop();
+    setAlphaDiceBurst(true);
+    window.setTimeout(() => setAlphaDiceBurst(false), 520);
+    setAlphaWords((prev) => {
+      const next = [...prev, w];
+      setAlphaMessage(`Nice! "${w.toUpperCase()}" — 계속! (${next.length}개)`);
+      return next;
+    });
+    setAlphaInput("");
+    resetSharedTranscript();
+    setAlphaTimeLeft(ALPHA_ROUND_SEC);
+    setAlphaTimerKey((k) => k + 1);
+  }, [alphaLetter, alphaRolling, alphaExpired, alphaInput, liveTranscript, alphaWords, resetSharedTranscript]);
+
+  const beginTongueRound = useCallback(() => {
+    playClick();
+    resetSharedTranscript();
+    const line = pickRandom(TONGUE_LINES);
+    setTongueLine(line);
+    setTongueInput("");
+    setTongueAttempts(0);
+    setTongueSuccess(false);
+    setTongueShake(false);
+    setTongueCrownBurst(false);
+  }, [resetSharedTranscript]);
+
+  const submitTongueTry = useCallback(() => {
+    const spoken = normalizeHeardText(tongueInput) || normalizeHeardText(liveTranscript);
+    if (isSentenceMatch(spoken, tongueLine.text)) {
+      playTransition();
+      setTongueSuccess(true);
+      setTongueCrownBurst(true);
+      window.setTimeout(() => setTongueCrownBurst(false), 1000);
+    } else {
+      playBuzzer();
+      setTongueShake(true);
+      setTongueAttempts((a) => a + 1);
+      window.setTimeout(() => setTongueShake(false), 500);
+    }
+  }, [tongueInput, liveTranscript, tongueLine.text]);
 
   const triggerWordChainCelebration = useCallback(() => {
     if (!wordChainFinished) return;
@@ -1679,82 +2001,79 @@ export default function GamePage() {
     if (previousModeRef.current === "memory" && mode !== "memory") {
       stopMemoryPlayback();
     }
+    if (previousModeRef.current === "rhythm" && mode !== "rhythm") {
+      rhythmPlaybackTokenRef.current += 1;
+      stopRhythmDanceBgm();
+      stopHintSpeech();
+      if (rhythmManualChunkClearRef.current) {
+        window.clearTimeout(rhythmManualChunkClearRef.current);
+        rhythmManualChunkClearRef.current = null;
+      }
+    }
     previousModeRef.current = mode;
-  }, [mode, stopMemoryPlayback]);
+  }, [mode, stopMemoryPlayback, stopHintSpeech]);
 
   useEffect(() => {
-    if (mode === "memory") {
-      stopTreasureBgm();
-      stopFrogBgm();
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      startMemoryBgm();
-      return () => {
-        stopMemoryBgm();
-      };
-    }
-    if (mode === "frog") {
-      stopTreasureBgm();
-      stopMemoryBgm();
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      startFrogBgm();
-      return () => {
-        stopFrogBgm();
-      };
-    }
-    if (mode === "treasure") {
-      stopFrogBgm();
-      stopMemoryBgm();
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      startTreasureBgm();
-      return () => {
-        stopTreasureBgm();
-      };
-    }
-    if (mode === "wordchain" || mode === "duel" || mode === "twenty") {
-      stopTreasureBgm();
-      stopFrogBgm();
-      stopMemoryBgm();
-      stopDuelMachineBgm();
-      startWordChainBgm();
-      return () => {
-        stopWordChainBgm();
-      };
-    }
-    if (mode === "bomb" || mode === "password" || mode === "repair") {
-      stopTreasureBgm();
-      stopFrogBgm();
-      stopMemoryBgm();
-      stopWordChainBgm();
-      startDuelMachineBgm();
-    } else {
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      stopMemoryBgm();
-      stopFrogBgm();
-      stopTreasureBgm();
-    }
-    return () => {
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      stopMemoryBgm();
-      stopFrogBgm();
-      stopTreasureBgm();
-    };
+    startBgmForGameMode(mode);
   }, [mode]);
+
+  useEffect(() => {
+    setBgmDucked(isListening || isProcessing);
+  }, [isListening, isProcessing]);
+
+  useEffect(() => {
+    if (mode !== "alphabet") return;
+    if (!isListening && !isProcessing) return;
+    setAlphaInput(liveTranscript);
+  }, [mode, isListening, isProcessing, liveTranscript]);
+
+  useEffect(() => {
+    if (mode !== "tongue") return;
+    if (!isListening && !isProcessing) return;
+    setTongueInput(liveTranscript);
+  }, [mode, isListening, isProcessing, liveTranscript]);
+
+  useEffect(() => {
+    if (mode !== "rhythm") return;
+    if (!isListening && !isProcessing) return;
+    setRhythmInput(liveTranscript);
+  }, [mode, isListening, isProcessing, liveTranscript]);
+
+  useEffect(() => {
+    if (mode !== "alphabet" || !alphaLetter || alphaRolling || alphaExpired) return;
+    setAlphaTimeLeft(ALPHA_ROUND_SEC);
+    const id = window.setInterval(() => {
+      setAlphaTimeLeft((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(id);
+          setAlphaExpired(true);
+          playBuzzer();
+          setAlphaShake(true);
+          window.setTimeout(() => setAlphaShake(false), 500);
+          setAlphaMessage("시간 초과! 주사위를 다시 굴려 도전하세요.");
+          return 0;
+        }
+        playPop();
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [mode, alphaLetter, alphaRolling, alphaExpired, alphaTimerKey]);
 
   useEffect(() => {
     return () => {
       activeRoundRef.current = null;
       stop();
       stopMemoryPlayback();
-      stopDuelMachineBgm();
-      stopWordChainBgm();
-      stopMemoryBgm();
-      stopFrogBgm();
-      stopTreasureBgm();
+      stopAllCornerBgm();
+      if (alphaRollTimerRef.current) {
+        clearInterval(alphaRollTimerRef.current);
+        alphaRollTimerRef.current = null;
+      }
+      if (rhythmManualChunkClearRef.current) {
+        window.clearTimeout(rhythmManualChunkClearRef.current);
+        rhythmManualChunkClearRef.current = null;
+      }
     };
   }, [stop, stopMemoryPlayback]);
 
@@ -1768,6 +2087,7 @@ export default function GamePage() {
     duelWinner === "user" ? "ME" : duelWinner === "ai" ? "AI" : "DRAW";
   const duelSaberShift = Math.max(-38, Math.min(38, (duelBeam - 50) * 1.1 + duelSpeechBoost * 14));
   const wordChainRequired = getLastLetter(wordChainCurrent).toUpperCase();
+  const rhythmOverlayActive = rhythmCountdownLabel !== null || rhythmPhase === "tier2_ment";
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white relative overflow-hidden">
@@ -1901,6 +2221,19 @@ export default function GamePage() {
         @keyframes treasure-bubble-rise {
           0% { transform: translateY(34px) scale(0.72); opacity: 0; }
           100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes rhythm-chunk-tts-wave {
+          0%, 100% { transform: scale(1) translateY(0); box-shadow: 0 0 16px rgba(236,72,153,0.35); }
+          50% { transform: scale(1.07) translateY(-6px); box-shadow: 0 0 26px rgba(34,211,238,0.45); }
+        }
+        @keyframes rhythm-chunk-idle {
+          0%, 100% { transform: scale(1) translateY(0); }
+          50% { transform: scale(1.02) translateY(-2px); }
+        }
+        @keyframes rhythm-clear-float {
+          0% { transform: translateY(12px) scale(0.85); opacity: 0; }
+          40% { transform: translateY(-4px) scale(1.05); opacity: 1; }
+          100% { transform: translateY(-6px) scale(1); opacity: 1; }
         }
       `}</style>
 
@@ -2053,6 +2386,42 @@ export default function GamePage() {
               <p className="text-sm text-amber-200">Treasure Quest</p>
               <h2 className="text-xl font-bold mt-1">AI 보물찾기 게임</h2>
               <p className="text-sm text-white/80 mt-2">보물 단어를 넣어 문장 만들기</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("alphabet");
+                beginAlphaRound();
+              }}
+              className="rounded-2xl border border-indigo-300/40 bg-indigo-500/20 hover:bg-indigo-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-indigo-200">Letter Quiz</p>
+              <h2 className="text-xl font-bold mt-1">알파벳 주사위 퀴즈</h2>
+              <p className="text-sm text-white/80 mt-2">주사위로 알파벳 정하고 단어 릴레이</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("tongue");
+                beginTongueRound();
+              }}
+              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-fuchsia-200">Tongue Twister</p>
+              <h2 className="text-xl font-bold mt-1">AI 텅 트위스터 챌린지</h2>
+              <p className="text-sm text-white/80 mt-2">문장 듣고 똑같이 따라하기</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("rhythm");
+                beginRhythmRound();
+              }}
+              className="rounded-2xl border border-pink-300/40 bg-pink-500/20 hover:bg-pink-500/30 p-5 text-left transition"
+            >
+              <p className="text-sm text-pink-200">Rhythm &amp; Dance</p>
+              <h2 className="text-xl font-bold mt-1">AI 리듬 따라잡기</h2>
+              <p className="text-sm text-white/80 mt-2">2단계로 빠르게 문장 말하기</p>
             </button>
           </section>
         )}
@@ -3164,6 +3533,414 @@ export default function GamePage() {
               </button>
             </div>
           </section>
+        )}
+
+        {mode === "alphabet" && (
+          <section
+            className={`relative rounded-3xl border border-indigo-300/40 bg-gradient-to-b from-indigo-900/50 via-slate-950/75 to-black p-5 space-y-4 ${
+              alphaShake ? "animate-[shake_0.5s_linear]" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-indigo-100">AI 주사위 굴리기</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+            {alphaMessage ? <p className="text-sm text-white/90">{alphaMessage}</p> : null}
+            <div className="flex flex-col items-center gap-4">
+              <button
+                type="button"
+                onClick={rollAlphaDice}
+                disabled={alphaRolling}
+                className="relative w-40 h-40 rounded-2xl border-4 border-indigo-300/50 bg-indigo-950/60 flex items-center justify-center text-6xl font-black text-indigo-50 shadow-[inset_0_0_30px_rgba(99,102,241,0.35)] disabled:opacity-80"
+              >
+                <span
+                  className="relative z-10 inline-flex items-center justify-center"
+                  style={
+                    alphaRolling
+                      ? { animation: "bomb-shake 0.2s linear infinite" }
+                      : !alphaLetter || alphaExpired
+                      ? { animation: "go-jitter 1.2s ease-in-out infinite" }
+                      : undefined
+                  }
+                >
+                  {!alphaLetter || alphaExpired ? "🎲" : alphaRollFace}
+                </span>
+                {alphaLetter && !alphaExpired ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="relative w-32 h-32">
+                      <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="44" stroke="rgba(255,255,255,0.14)" strokeWidth="7" fill="none" />
+                        <circle
+                          cx="50"
+                          cy="50"
+                          r="44"
+                          stroke="url(#alphaTimerGrad)"
+                          strokeWidth="7"
+                          fill="none"
+                          strokeLinecap="round"
+                          strokeDasharray={276.46}
+                          strokeDashoffset={(1 - alphaTimeLeft / ALPHA_ROUND_SEC) * 276.46}
+                          style={{ transition: "stroke-dashoffset 0.25s linear" }}
+                        />
+                        <defs>
+                          <linearGradient id="alphaTimerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#22d3ee" />
+                            <stop offset="55%" stopColor="#a78bfa" />
+                            <stop offset="100%" stopColor="#f472b6" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+                  </div>
+                ) : null}
+                {alphaLetter && !alphaExpired ? (
+                  <>
+                    <span className="absolute -inset-1 rounded-3xl bg-fuchsia-400/10 blur-lg pointer-events-none" />
+                    <span className="absolute top-2 right-2 px-2 py-1 rounded-full bg-indigo-900/85 border border-cyan-300/50 text-xs font-black text-cyan-100 drop-shadow-[0_0_8px_rgba(34,211,238,0.55)] pointer-events-none">
+                      {alphaTimeLeft}s
+                    </span>
+                  </>
+                ) : null}
+                {alphaDiceBurst ? (
+                  <div className="absolute inset-0 pointer-events-none">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <span
+                        key={`dice-burst-${i}`}
+                        className="absolute text-sm"
+                        style={{
+                          left: "50%",
+                          top: "50%",
+                          animation: `duel-stars 0.55s ease-out ${i * 0.03}s`,
+                          transform: `translate(${Math.cos((i / 8) * Math.PI * 2) * 28}px, ${Math.sin((i / 8) * Math.PI * 2) * 28}px)`,
+                        }}
+                      >
+                        🎲
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </button>
+            </div>
+            <div className="rounded-2xl border border-indigo-300/35 bg-indigo-500/10 p-3">
+              <p className="text-[11px] text-indigo-100/85 mb-2 font-semibold">내가 말한 단어</p>
+              <div className="min-h-[30px] flex flex-wrap gap-2">
+                {alphaWords.map((w, i) => (
+                  <span
+                    key={`${w}-${i}`}
+                    className="px-2.5 py-1 rounded-lg bg-indigo-500/25 border border-indigo-300/40 text-xs uppercase tracking-wide text-indigo-50"
+                  >
+                    {i + 1}. {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {alphaDiceBurst ? (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                {Array.from({ length: 26 }).map((_, i) => (
+                  <span
+                    key={`alpha-screen-burst-${i}`}
+                    className="absolute text-lg"
+                    style={{
+                      left: `${(i * 17 + 9) % 100}%`,
+                      top: "-10px",
+                      animation: `confetti-drop ${0.9 + (i % 5) * 0.2}s ease-out ${i * 0.03}s`,
+                    }}
+                  >
+                    🎲
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <input
+                value={alphaInput}
+                onChange={(e) => {
+                  setAlphaInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitAlphaWord()}
+                placeholder="음성 인식이 안 되면 텍스트를 입력하세요."
+                disabled={!alphaLetter || alphaRolling || alphaExpired}
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300/60 disabled:opacity-50"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitAlphaWord}
+                disabled={!alphaLetter || alphaRolling || alphaExpired}
+                className="px-3.5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white text-sm font-medium disabled:opacity-50"
+              >
+                단어 제출
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={beginAlphaRound}
+              className="w-full py-2.5 rounded-xl border border-indigo-300/40 text-indigo-100 hover:bg-indigo-500/20 transition"
+            >
+              새 라운드
+            </button>
+          </section>
+        )}
+
+        {mode === "tongue" && (
+          <section
+            className={`relative overflow-hidden rounded-3xl border border-fuchsia-300/45 bg-gradient-to-b from-fuchsia-900/50 via-violet-950/75 to-slate-950 p-5 space-y-4 ${
+              tongueShake ? "animate-[shake_0.5s_linear]" : ""
+            }`}
+          >
+            <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-fuchsia-300/20 blur-2xl pointer-events-none" />
+            <div className="absolute -bottom-12 -left-10 w-40 h-40 rounded-full bg-cyan-300/15 blur-2xl pointer-events-none" />
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-fuchsia-100">AI 텅 트위스터 챌린지</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+            <div className="rounded-2xl border border-fuchsia-200/70 bg-gradient-to-r from-fuchsia-500/30 to-cyan-400/25 p-4 shadow-[0_0_30px_rgba(217,70,239,0.38)]">
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  speakHint(tongueLine.text);
+                }}
+                className="text-left w-full text-base sm:text-lg font-bold text-fuchsia-50 leading-snug hover:text-white transition"
+              >
+                {tongueLine.text}
+              </button>
+              <p className="text-xs text-fuchsia-100/80 mt-2">시도 횟수: {tongueAttempts}</p>
+            </div>
+            {tongueCrownBurst ? (
+              <div className="absolute inset-0 pointer-events-none">
+                {Array.from({ length: 16 }).map((_, i) => (
+                  <span
+                    key={`tongue-crown-${i}`}
+                    className="absolute text-2xl"
+                    style={{
+                      left: "50%",
+                      top: "50%",
+                      animation: `duel-stars 0.9s ease-out ${i * 0.02}s`,
+                      transform: `translate(${Math.cos((i / 16) * Math.PI * 2) * 90}px, ${Math.sin((i / 16) * Math.PI * 2) * 90}px)`,
+                    }}
+                  >
+                    👑
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <input
+                value={tongueInput}
+                onChange={(e) => {
+                  setTongueInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitTongueTry()}
+                placeholder="음성 인식이 안 되면 텍스트를 입력하세요."
+                disabled={tongueSuccess}
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60 disabled:opacity-50"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitTongueTry}
+                disabled={tongueSuccess}
+                className="px-3.5 py-2.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white text-sm font-medium disabled:opacity-50"
+              >
+                제출
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={beginTongueRound}
+              className="w-full py-2.5 rounded-xl border border-fuchsia-300/40 text-fuchsia-100 hover:bg-fuchsia-500/20 transition"
+            >
+              다음 문장
+            </button>
+          </section>
+        )}
+
+        {mode === "rhythm" && (
+          <>
+          {rhythmOverlayActive && (
+            <div className="fixed inset-0 z-[80] pointer-events-none flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/45" />
+              <span
+                key={`${rhythmPhase}-${rhythmCountdownLabel ?? "none"}-${rhythmTier}`}
+                className="relative text-6xl sm:text-7xl font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(56,189,248,0.75)]"
+                style={{ animation: "rhythm-clear-float 0.45s ease-out both" }}
+              >
+                {rhythmPhase === "tier2_ment"
+                  ? "2단계"
+                  : rhythmCountdownLabel === "go"
+                  ? "GO!"
+                  : rhythmCountdownLabel ?? ""}
+              </span>
+            </div>
+          )}
+          <section
+            className="relative overflow-hidden rounded-3xl border border-fuchsia-400/35 bg-gradient-to-b from-purple-900/50 via-slate-950/80 to-black p-5 space-y-4 min-h-[300px]"
+            style={rhythmOverlayActive ? { visibility: "hidden" } : undefined}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-extrabold text-fuchsia-200">AI 리듬 따라잡기</h2>
+              <button
+                type="button"
+                onClick={() => {
+                  playClick();
+                  setMode("menu");
+                }}
+                className="text-sm text-white/70 hover:text-white"
+              >
+                코너 선택으로
+              </button>
+            </div>
+
+            {rhythmPhase === "cleared" ? (
+              <div className="text-center space-y-3 py-6">
+                {rhythmClearFlash ? (
+                  <span
+                    key={rhythmClearFloatKey}
+                    className="inline-block text-3xl font-black text-cyan-100"
+                    style={{ animation: "duel-stars 0.5s ease-out both" }}
+                  >
+                    CLEAR!
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    speakHint(rhythmLine.full, { fast: true });
+                  }}
+                  className="mx-auto block w-full max-w-xl rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-6 py-6 text-lg sm:text-xl font-black text-cyan-50 shadow-[0_0_30px_rgba(56,189,248,0.45)] hover:bg-cyan-300/35 transition"
+                >
+                  {rhythmLine.full}
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="grid grid-cols-3 gap-2">
+                  {([0, 1, 2] as const).map((idx) => {
+                    const merging = rhythmPhase === "merging";
+                    const chunkAudible =
+                      rhythmDemoChunk === idx ||
+                      (rhythmPhase === "play" && rhythmManualChunk === idx);
+                    let anim: string | undefined;
+                    if (!merging) {
+                      if (chunkAudible && (rhythmPhase === "demo" || rhythmPhase === "play")) {
+                        anim = "rhythm-chunk-tts-wave 0.85s ease-in-out infinite";
+                      } else if (rhythmPhase === "demo" || rhythmPhase === "play") {
+                        anim = "rhythm-chunk-idle 2.2s ease-in-out infinite";
+                      }
+                    }
+                    const mergeStyle =
+                      merging
+                        ? idx === 0
+                          ? { transform: "translateX(42%) scale(0.84)", opacity: 0.65 }
+                          : idx === 1
+                          ? { transform: "translateX(0) scale(0.87)", opacity: 0.72 }
+                          : { transform: "translateX(-42%) scale(0.84)", opacity: 0.65 }
+                        : undefined;
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        disabled={rhythmPhase !== "play" || merging}
+                        onClick={() => replayRhythmChunk(idx)}
+                        className={`rounded-xl border px-2 py-4 text-center text-xs sm:text-sm font-semibold leading-snug transition min-h-[92px] ${
+                          chunkAudible
+                            ? rhythmTier === 1
+                              ? "border-fuchsia-300/70 bg-fuchsia-500/30 text-white shadow-[0_0_20px_rgba(217,70,239,0.35)]"
+                              : "border-sky-300/70 bg-sky-500/30 text-white shadow-[0_0_20px_rgba(56,189,248,0.35)]"
+                            : rhythmTier === 1
+                            ? "border-fuchsia-200/35 bg-fuchsia-900/20 text-fuchsia-50"
+                            : "border-sky-200/35 bg-sky-900/20 text-sky-50"
+                        } ${rhythmPhase === "play" && !merging ? "cursor-pointer hover:bg-white/10" : "cursor-default"}`}
+                        style={{
+                          ...mergeStyle,
+                          animation: anim,
+                        }}
+                      >
+                        {rhythmLine.chunks[idx]}
+                      </button>
+                    );
+                  })}
+                </div>
+                {rhythmPhase === "merging" ? (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-full max-w-xl rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-6 py-6 text-lg sm:text-xl font-black text-cyan-50 text-center shadow-[0_0_30px_rgba(56,189,248,0.45)] animate-[rhythm-clear-float_0.85s_ease-out_both]">
+                      {rhythmLine.full}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {sttError ? (
+              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                {sttError}
+              </p>
+            ) : null}
+
+            <div className="flex items-center gap-2">
+              <input
+                value={rhythmInput}
+                onChange={(e) => {
+                  setRhythmInput(e.target.value);
+                  setLiveTranscript(e.target.value);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && submitRhythmTry()}
+                placeholder="음성 인식이 안 되면 텍스트를 입력하세요."
+                disabled={rhythmPhase !== "play"}
+                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60 disabled:opacity-50"
+              />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <button
+                type="button"
+                onClick={submitRhythmTry}
+                disabled={rhythmPhase !== "play"}
+                className="px-3.5 py-2.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white text-sm font-medium disabled:opacity-50"
+              >
+                제출
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={beginRhythmRound}
+              className="w-full py-2.5 rounded-xl border border-fuchsia-300/40 text-fuchsia-100 hover:bg-fuchsia-500/20 transition"
+            >
+              다음 문장
+            </button>
+          </section>
+          </>
         )}
 
         {mode === "repair" && (

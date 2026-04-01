@@ -22,6 +22,39 @@ export function unlockAudioContext(): void {
   }
 }
 
+/** 코너 배경음만 거치는 마스터 게인 (효과음은 destination 직결 유지) */
+let bgmMasterGain: GainNode | null = null;
+const BGM_DUCK_LEVEL = 0.12;
+const BGM_DUCK_RAMP_S = 0.07;
+
+function getBgmSink(ctx: AudioContext): GainNode {
+  if (!bgmMasterGain || bgmMasterGain.context !== ctx) {
+    bgmMasterGain = ctx.createGain();
+    bgmMasterGain.gain.value = 1;
+    bgmMasterGain.connect(ctx.destination);
+  }
+  return bgmMasterGain;
+}
+
+/**
+ * 음성 입력 중에는 BGM만 살짝 줄여 마이크 누설을 줄이고, 끊김은 최소화합니다.
+ */
+export function setBgmDucked(ducked: boolean): void {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const sink = getBgmSink(ctx);
+    const g = sink.gain;
+    const t = ctx.currentTime;
+    const target = ducked ? BGM_DUCK_LEVEL : 1;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(Math.max(0.0001, g.value), t);
+    g.linearRampToValueAtTime(target, t + BGM_DUCK_RAMP_S);
+  } catch {
+    /* 무시 */
+  }
+}
+
 function runTone(
   ctx: AudioContext,
   frequency: number,
@@ -502,6 +535,10 @@ let treasureBgmInterval: ReturnType<typeof setInterval> | null = null;
 let treasureBgmStep = 0;
 let treasurePadOsc: OscillatorNode | null = null;
 let treasurePadGain: GainNode | null = null;
+let rhythmBgmInterval: ReturnType<typeof setInterval> | null = null;
+let rhythmBgmStep = 0;
+let rhythmPadOsc: OscillatorNode | null = null;
+let rhythmPadGain: GainNode | null = null;
 
 function runMachinePulse(
   ctx: AudioContext,
@@ -517,7 +554,7 @@ function runMachinePulse(
   osc.frequency.setValueAtTime(frequency, at);
   osc.frequency.exponentialRampToValueAtTime(Math.max(40, frequency * 0.76), at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -546,7 +583,7 @@ function startMachineHum(ctx: AudioContext): void {
   duelMachineHumGain.gain.setValueAtTime(0.001, ctx.currentTime);
   duelMachineHumGain.gain.linearRampToValueAtTime(0.0025, ctx.currentTime + 0.08);
   duelMachineHumOsc.connect(duelMachineHumGain);
-  duelMachineHumGain.connect(ctx.destination);
+  duelMachineHumGain.connect(getBgmSink(ctx));
   duelMachineHumOsc.start(ctx.currentTime);
 }
 
@@ -623,7 +660,7 @@ function runBombTone(
   osc.frequency.linearRampToValueAtTime(frequency * 1.08, at + duration * 0.5);
   osc.frequency.linearRampToValueAtTime(frequency, at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -651,7 +688,7 @@ function startBombPad(ctx: AudioContext): void {
   bombPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
   bombPadGain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.08);
   bombPadOsc.connect(bombPadGain);
-  bombPadGain.connect(ctx.destination);
+  bombPadGain.connect(getBgmSink(ctx));
   bombPadOsc.start(ctx.currentTime);
 }
 
@@ -728,7 +765,7 @@ function runWordChainTone(
   osc.frequency.linearRampToValueAtTime(frequency * 1.04, at + duration * 0.55);
   osc.frequency.linearRampToValueAtTime(frequency * 0.98, at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -757,7 +794,7 @@ function startWordChainPad(ctx: AudioContext): void {
   wordChainPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
   wordChainPadGain.gain.linearRampToValueAtTime(0.003, ctx.currentTime + 0.08);
   wordChainPadOsc.connect(wordChainPadGain);
-  wordChainPadGain.connect(ctx.destination);
+  wordChainPadGain.connect(getBgmSink(ctx));
   wordChainPadOsc.start(ctx.currentTime);
 }
 
@@ -834,7 +871,7 @@ function runMemoryTone(
   osc.frequency.linearRampToValueAtTime(frequency * 1.02, at + duration * 0.45);
   osc.frequency.linearRampToValueAtTime(frequency * 0.96, at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -864,7 +901,7 @@ function startMemoryPad(ctx: AudioContext): void {
   memoryPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
   memoryPadGain.gain.linearRampToValueAtTime(0.0015, ctx.currentTime + 0.08);
   memoryPadOsc.connect(memoryPadGain);
-  memoryPadGain.connect(ctx.destination);
+  memoryPadGain.connect(getBgmSink(ctx));
   memoryPadOsc.start(ctx.currentTime);
 }
 
@@ -926,12 +963,13 @@ export function stopMemoryBgm(): void {
   }
 }
 
-function runFrogCroak(ctx: AudioContext, at: number, volume = 0.06): void {
+function runFrogCroak(ctx: AudioContext, at: number, volume = 0.06, useBgmSink = false): void {
   const main = ctx.createOscillator();
   const body = ctx.createOscillator();
   const mix = ctx.createGain();
   const filter = ctx.createBiquadFilter();
   const gain = ctx.createGain();
+  const out = useBgmSink ? getBgmSink(ctx) : ctx.destination;
 
   main.type = "triangle";
   main.frequency.setValueAtTime(235, at);
@@ -949,7 +987,7 @@ function runFrogCroak(ctx: AudioContext, at: number, volume = 0.06): void {
   body.connect(mix);
   mix.connect(filter);
   filter.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(out);
 
   mix.gain.setValueAtTime(0.58, at);
   gain.gain.setValueAtTime(0.001, at);
@@ -993,7 +1031,7 @@ function runFrogTone(
   osc.frequency.linearRampToValueAtTime(frequency * 1.03, at + duration * 0.45);
   osc.frequency.linearRampToValueAtTime(frequency * 0.92, at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.01);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -1010,8 +1048,8 @@ function runFrogLoopStep(ctx: AudioContext, step: number): void {
   runFrogTone(ctx, pulsePattern[idx], 0.16, "triangle", 0.012, at);
   if (bell > 0) runFrogTone(ctx, bell, 0.08, "sine", 0.02, at + 0.03);
   // 크로크 빈도는 낮춰서 실제 개구리처럼 간헐적으로 배치
-  if (idx === 3) runFrogCroak(ctx, at + 0.09, 0.05);
-  if (idx === 7) runFrogCroak(ctx, at + 0.1, 0.042);
+  if (idx === 3) runFrogCroak(ctx, at + 0.09, 0.05, true);
+  if (idx === 7) runFrogCroak(ctx, at + 0.1, 0.042, true);
 }
 
 function startFrogPad(ctx: AudioContext): void {
@@ -1023,7 +1061,7 @@ function startFrogPad(ctx: AudioContext): void {
   frogPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
   frogPadGain.gain.linearRampToValueAtTime(0.0018, ctx.currentTime + 0.08);
   frogPadOsc.connect(frogPadGain);
-  frogPadGain.connect(ctx.destination);
+  frogPadGain.connect(getBgmSink(ctx));
   frogPadOsc.start(ctx.currentTime);
 }
 
@@ -1100,7 +1138,7 @@ function runTreasureTone(
   osc.frequency.linearRampToValueAtTime(frequency * 1.12, at + duration * 0.5);
   osc.frequency.linearRampToValueAtTime(frequency * 0.94, at + duration);
   osc.connect(gain);
-  gain.connect(ctx.destination);
+  gain.connect(getBgmSink(ctx));
   gain.gain.setValueAtTime(0.001, at);
   gain.gain.linearRampToValueAtTime(volume, at + 0.012);
   gain.gain.exponentialRampToValueAtTime(0.01, at + duration);
@@ -1133,7 +1171,7 @@ function startTreasurePad(ctx: AudioContext): void {
   treasurePadGain.gain.setValueAtTime(0.001, ctx.currentTime);
   treasurePadGain.gain.linearRampToValueAtTime(0.0026, ctx.currentTime + 0.08);
   treasurePadOsc.connect(treasurePadGain);
-  treasurePadGain.connect(ctx.destination);
+  treasurePadGain.connect(getBgmSink(ctx));
   treasurePadOsc.start(ctx.currentTime);
 }
 
@@ -1192,5 +1230,213 @@ export function stopTreasureBgm(): void {
     if (ctx) stopTreasurePad(ctx);
   } catch {
     /* 무시 */
+  }
+}
+
+function runRhythmKick(ctx: AudioContext, at: number, freq: number, vol: number): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(freq, at);
+  osc.frequency.exponentialRampToValueAtTime(42, at + 0.12);
+  osc.connect(gain);
+  gain.connect(getBgmSink(ctx));
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(vol, at + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + 0.11);
+  osc.start(at);
+  osc.stop(at + 0.12);
+}
+
+function runRhythmHat(ctx: AudioContext, at: number, vol: number): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "square";
+  osc.frequency.setValueAtTime(8800, at);
+  osc.frequency.exponentialRampToValueAtTime(2200, at + 0.04);
+  osc.connect(gain);
+  gain.connect(getBgmSink(ctx));
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(vol, at + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + 0.05);
+  osc.start(at);
+  osc.stop(at + 0.055);
+}
+
+function runRhythmBassSqu(ctx: AudioContext, at: number, freq: number): void {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(freq, at);
+  osc.frequency.linearRampToValueAtTime(freq * 1.02, at + 0.06);
+  osc.connect(gain);
+  gain.connect(getBgmSink(ctx));
+  gain.gain.setValueAtTime(0.001, at);
+  gain.gain.linearRampToValueAtTime(0.018, at + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, at + 0.14);
+  osc.start(at);
+  osc.stop(at + 0.15);
+}
+
+/** 경쾌한 하우스풍 그루브 (이전 EDM 킥 패턴과 다른 멜로디·밸런스) */
+function runRhythmEdmStep(ctx: AudioContext, step: number): void {
+  const at = ctx.currentTime + 0.006;
+  const beat = step % 8;
+  if (beat === 0 || beat === 4) {
+    runRhythmKick(ctx, at, 70, 0.062);
+    runRhythmBassSqu(ctx, at, beat === 0 ? 65.41 : 73.42);
+  }
+  if (beat === 2) {
+    runRhythmHat(ctx, at, 0.02);
+    runWordChainTone(ctx, 329.63, 0.1, "sine", 0.02, at + 0.024);
+    runRhythmKick(ctx, at + 0.018, 195, 0.016);
+  } else if (beat === 6) {
+    runRhythmHat(ctx, at, 0.02);
+    runWordChainTone(ctx, 392, 0.09, "triangle", 0.017, at + 0.022);
+    runRhythmKick(ctx, at + 0.016, 185, 0.015);
+  } else if (beat === 1 || beat === 3 || beat === 5 || beat === 7) {
+    runRhythmHat(ctx, at, beat === 5 ? 0.012 : 0.018);
+    if (beat === 1) {
+      runWordChainTone(ctx, 246.94, 0.07, "sine", 0.014, at + 0.018);
+    }
+    if (beat === 7) {
+      runWordChainTone(ctx, 293.66, 0.075, "sine", 0.015, at + 0.02);
+    }
+  }
+}
+
+function startRhythmPad(ctx: AudioContext): void {
+  if (rhythmPadOsc || rhythmPadGain) return;
+  rhythmPadOsc = ctx.createOscillator();
+  rhythmPadGain = ctx.createGain();
+  rhythmPadOsc.type = "sine";
+  rhythmPadOsc.frequency.setValueAtTime(130, ctx.currentTime);
+  rhythmPadGain.gain.setValueAtTime(0.001, ctx.currentTime);
+  rhythmPadGain.gain.linearRampToValueAtTime(0.0045, ctx.currentTime + 0.12);
+  rhythmPadOsc.connect(rhythmPadGain);
+  rhythmPadGain.connect(getBgmSink(ctx));
+  rhythmPadOsc.start(ctx.currentTime);
+}
+
+function stopRhythmPad(ctx: AudioContext): void {
+  if (!rhythmPadOsc || !rhythmPadGain) return;
+  try {
+    rhythmPadGain.gain.cancelScheduledValues(ctx.currentTime);
+    rhythmPadGain.gain.setValueAtTime(rhythmPadGain.gain.value, ctx.currentTime);
+    rhythmPadGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    rhythmPadOsc.stop(ctx.currentTime + 0.09);
+  } catch {
+    /* 무시 */
+  } finally {
+    rhythmPadOsc = null;
+    rhythmPadGain = null;
+  }
+}
+
+/** AI 리듬 따라잡기용 EDM·댄스 루프 배경음 (2단계는 스텝 간격 단축) */
+export function startRhythmDanceBgm(options?: { fast?: boolean }): void {
+  try {
+    if (rhythmBgmInterval) return;
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    /* 2단계: 1단계보다만 살짝 빠르게(과속 느낌 완화) */
+    const stepMs = options?.fast ? 150 : 172;
+
+    const startLoop = () => {
+      if (rhythmBgmInterval) return;
+      rhythmBgmStep = 0;
+      startRhythmPad(ctx);
+      runRhythmEdmStep(ctx, rhythmBgmStep);
+      rhythmBgmStep += 1;
+      rhythmBgmInterval = setInterval(() => {
+        runRhythmEdmStep(ctx, rhythmBgmStep);
+        rhythmBgmStep += 1;
+      }, stepMs);
+    };
+
+    if (ctx.state === "suspended") {
+      ctx.resume().then(startLoop).catch(() => {});
+    } else {
+      startLoop();
+    }
+  } catch {
+    /* 무시 */
+  }
+}
+
+export function stopRhythmDanceBgm(): void {
+  try {
+    if (rhythmBgmInterval) {
+      clearInterval(rhythmBgmInterval);
+      rhythmBgmInterval = null;
+    }
+    const ctx = getAudioContext();
+    if (ctx) stopRhythmPad(ctx);
+  } catch {
+    /* 무시 */
+  }
+}
+
+/** 코너 배경음 전부 끄기 (음성 입력 중 마이크가 BGM을 집어들이지 않게 할 때 사용) */
+export function stopAllCornerBgm(): void {
+  stopBombBgm();
+  stopDuelMachineBgm();
+  stopWordChainBgm();
+  stopMemoryBgm();
+  stopFrogBgm();
+  stopTreasureBgm();
+  stopRhythmDanceBgm();
+}
+
+/**
+ * 게임 화면 모드에 맞는 코너 배경음만 켜기 (이미 다른 루프는 stopAllCornerBgm 후 시작)
+ */
+export function startBgmForGameMode(
+  mode:
+    | "menu"
+    | "bomb"
+    | "duel"
+    | "twenty"
+    | "password"
+    | "repair"
+    | "tongue"
+    | "wordchain"
+    | "memory"
+    | "frog"
+    | "treasure"
+    | "alphabet"
+    | "rhythm"
+): void {
+  stopAllCornerBgm();
+  switch (mode) {
+    case "memory":
+      startMemoryBgm();
+      break;
+    case "frog":
+      startFrogBgm();
+      break;
+    case "treasure":
+      startTreasureBgm();
+      break;
+    case "wordchain":
+    case "duel":
+    case "twenty":
+    case "alphabet":
+      startWordChainBgm();
+      break;
+    case "bomb":
+      startBombBgm();
+      break;
+    case "password":
+    case "repair":
+    case "tongue":
+      startDuelMachineBgm();
+      break;
+    case "rhythm":
+      /* 리듬 코너 BGM은 카운트다운·GO! 이후 화면에서 시작 */
+      break;
+    default:
+      break;
   }
 }

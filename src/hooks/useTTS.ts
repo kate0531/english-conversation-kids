@@ -73,11 +73,14 @@ function getMaleVoice(voices: SpeechSynthesisVoice[], person: TTSVoicePerson): S
   return index >= 0 ? list[index] : list[0];
 }
 
+export type SpeakOptions = { fast?: boolean };
+
 function speakWithBrowser(
   text: string,
   gender: "female" | "male",
   person: TTSVoicePerson,
-  lang: TTSLang
+  lang: TTSLang,
+  opts?: SpeakOptions
 ): void {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -86,18 +89,19 @@ function speakWithBrowser(
   u.volume = 0.98;
 
   const voices = window.speechSynthesis.getVoices();
+  const fast = !!opts?.fast;
   if (lang === "ko-KR") {
-    u.rate = 0.95;  // 살짝 빠르게 → 발랄하게
-    u.pitch = 1.1;  // 높은 피치 → 밝고 발랄하게
+    u.rate = fast ? 1.08 : 0.95;
+    u.pitch = 1.1;
     const voice = getKoreanFemaleVoice(voices);
     if (voice) u.voice = voice;
   } else if (gender === "female") {
-    u.rate = 0.92;
+    u.rate = fast ? 1.2 : 0.92;
     u.pitch = 1.15;
     const voice = getKindFemaleVoice(voices);
     if (voice) u.voice = voice;
   } else {
-    u.rate = 0.85;
+    u.rate = fast ? 1.05 : 0.85;
     u.pitch = 0.98;
     const voice = getMaleVoice(voices, person);
     if (voice) u.voice = voice;
@@ -136,7 +140,8 @@ const DING_BEFORE_NEXT_MS = 180;
 async function playTTSViaAPI(
   text: string,
   voice: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  playbackRate = 1
 ): Promise<{ ok: true } | { ok: false }> {
   stopOpenAITTS();
   let res: Response;
@@ -161,6 +166,7 @@ async function playTTSViaAPI(
       return;
     }
     const audio = new Audio(url);
+    audio.playbackRate = playbackRate;
     currentTTSAudio = audio;
     audio.onended = () => {
       URL.revokeObjectURL(url);
@@ -188,10 +194,12 @@ function speakWithBrowserAndWait(
   text: string,
   gender: "female" | "male",
   person: TTSVoicePerson,
-  lang: TTSLang
+  lang: TTSLang,
+  opts?: SpeakOptions
 ): Promise<boolean> {
   if (typeof window === "undefined" || !window.speechSynthesis) return Promise.resolve(false);
   window.speechSynthesis.cancel();
+  const fast = !!opts?.fast;
   return new Promise((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
@@ -199,17 +207,17 @@ function speakWithBrowserAndWait(
 
     const voices = window.speechSynthesis.getVoices();
     if (lang === "ko-KR") {
-      u.rate = 0.92;
+      u.rate = fast ? 1.04 : 0.92;
       u.pitch = 1.08;
       const voice = getKoreanFemaleVoice(voices);
       if (voice) u.voice = voice;
     } else if (gender === "female") {
-      u.rate = 0.88;
+      u.rate = fast ? 1.14 : 0.88;
       u.pitch = 1.12;
       const voice = getKindFemaleVoice(voices);
       if (voice) u.voice = voice;
     } else {
-      u.rate = 0.82;
+      u.rate = fast ? 0.98 : 0.82;
       u.pitch = 0.98;
       const voice = getMaleVoice(voices, person);
       if (voice) u.voice = voice;
@@ -377,7 +385,7 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
   }, []);
 
   const speak = useCallback(
-    (text: string) => {
+    (text: string, options?: SpeakOptions) => {
       if (typeof window === "undefined" || !text?.trim()) return;
       const normalized =
         lang === "ko-KR" ? normalizeForKorean(text) : normalizeForEnglish(text);
@@ -386,7 +394,7 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
       stopOpenAITTS();
 
       // 즉시 반응 우선: 한 문장 재생은 브라우저 TTS로 바로 시작
-      speakWithBrowser(normalized, gender === "male" ? "male" : "female", voicePerson, lang);
+      speakWithBrowser(normalized, gender === "male" ? "male" : "female", voicePerson, lang, options);
     },
     [gender, voicePerson, lang]
   );
@@ -396,7 +404,7 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
    * 주의: 재생 완료 후 mounted 여부와 관계없이 result.ok를 반환해야 함(Strict Mode 이중 마운트 시 오동작 방지).
    */
   const speakAndWait = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, options?: SpeakOptions): Promise<boolean> => {
       if (typeof window === "undefined" || !text?.trim()) return false;
       const normalized =
         lang === "ko-KR" ? normalizeForKorean(text) : normalizeForEnglish(text);
@@ -406,7 +414,8 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
       const voice = pickOpenAIVoice(gender, lang);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 140);
-      const result = await playTTSViaAPI(normalized, voice, controller.signal);
+      const apiRate = options?.fast ? 1.26 : 1;
+      const result = await playTTSViaAPI(normalized, voice, controller.signal, apiRate);
       clearTimeout(timeout);
       if (result.ok) return true;
       // API가 느리거나 실패하면 내장 음성으로 즉시 폴백
@@ -414,7 +423,8 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
         normalized,
         gender === "male" ? "male" : "female",
         voicePerson,
-        lang
+        lang,
+        options
       );
     },
     [gender, voicePerson, lang]
