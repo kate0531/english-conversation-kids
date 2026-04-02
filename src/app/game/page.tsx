@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import HomeButton from "@/components/HomeButton";
 import VoiceInputButton from "@/components/VoiceInputButton";
@@ -1076,7 +1076,7 @@ export default function GamePage() {
     maxRecordingMs: 12000,
     onInterim: (text) => setLiveTranscript(text),
     onResult: (text) => setLiveTranscript(text),
-    });
+  });
 
   const resetSharedTranscript = useCallback(() => {
     setLiveTranscript("");
@@ -1356,9 +1356,9 @@ export default function GamePage() {
       window.setTimeout(() => {
         setRhythmPhase("cleared");
         setRhythmClearFlash(true);
-        window.setTimeout(() => setRhythmClearFlash(false), 520);
+        window.setTimeout(() => setRhythmClearFlash(false), 720);
         setRhythmClearFloatKey((k) => k + 1);
-      }, 850);
+      }, 1000);
     }
   }, [rhythmPhase, rhythmTier, rhythmLine, rhythmInput, liveTranscript, runRhythmCountdownDemoAndUnlock]);
 
@@ -1927,17 +1927,17 @@ export default function GamePage() {
     setDuelPhase("result");
   }, [duelPhase, isListening, isProcessing, liveTranscript, duelInputText]);
 
-  useEffect(() => {
+  // 녹음 종료 직후 isListening/isProcessing이 둘 다 false가 되므로,
+  // "둘 중 하나일 때만 동기화" 가드가 있으면 Whisper 최종 텍스트가 필드에 안 들어감.
+  useLayoutEffect(() => {
     if (mode !== "bomb") return;
-    if (!isListening && !isProcessing) return;
     setBombInputText(liveTranscript);
-  }, [mode, isListening, isProcessing, liveTranscript]);
+  }, [mode, liveTranscript]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "duel") return;
-    if (!isListening && !isProcessing) return;
     setDuelInputText(liveTranscript);
-  }, [mode, isListening, isProcessing, liveTranscript]);
+  }, [mode, liveTranscript]);
 
   useEffect(() => {
     if (duelImpact === "none") return;
@@ -1973,29 +1973,25 @@ export default function GamePage() {
     setRepairTranscript(liveTranscript);
   }, [liveTranscript, mode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "wordchain") return;
-    if (!isListening && !isProcessing) return;
     setWordChainInput(liveTranscript);
-  }, [liveTranscript, mode, isListening, isProcessing]);
+  }, [liveTranscript, mode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "memory") return;
-    if (!isListening && !isProcessing) return;
     setMemoryInput(liveTranscript);
-  }, [liveTranscript, mode, isListening, isProcessing]);
+  }, [liveTranscript, mode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "frog") return;
-    if (!isListening && !isProcessing) return;
     setFrogInput(liveTranscript);
-  }, [liveTranscript, mode, isListening, isProcessing]);
+  }, [liveTranscript, mode]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "treasure") return;
-    if (!isListening && !isProcessing) return;
     setTreasureInput(liveTranscript);
-  }, [liveTranscript, mode, isListening, isProcessing]);
+  }, [liveTranscript, mode]);
 
   useEffect(() => {
     if (previousModeRef.current === "memory" && mode !== "memory") {
@@ -2021,23 +2017,20 @@ export default function GamePage() {
     setBgmDucked(isListening || isProcessing);
   }, [isListening, isProcessing]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "alphabet") return;
-    if (!isListening && !isProcessing) return;
     setAlphaInput(liveTranscript);
-  }, [mode, isListening, isProcessing, liveTranscript]);
+  }, [mode, liveTranscript]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "tongue") return;
-    if (!isListening && !isProcessing) return;
     setTongueInput(liveTranscript);
-  }, [mode, isListening, isProcessing, liveTranscript]);
+  }, [mode, liveTranscript]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (mode !== "rhythm") return;
-    if (!isListening && !isProcessing) return;
     setRhythmInput(liveTranscript);
-  }, [mode, isListening, isProcessing, liveTranscript]);
+  }, [mode, liveTranscript]);
 
   useEffect(() => {
     if (mode !== "alphabet" || !alphaLetter || alphaRolling || alphaExpired) return;
@@ -2234,6 +2227,17 @@ export default function GamePage() {
           0% { transform: translateY(12px) scale(0.85); opacity: 0; }
           40% { transform: translateY(-4px) scale(1.05); opacity: 1; }
           100% { transform: translateY(-6px) scale(1); opacity: 1; }
+        }
+        @keyframes rhythm-clear-overlay {
+          0% { transform: scale(0.75); opacity: 0; filter: blur(4px); }
+          35% { transform: scale(1.06); opacity: 1; filter: blur(0); }
+          70% { transform: scale(1); opacity: 1; }
+          100% { transform: scale(1.1); opacity: 0; }
+        }
+        @keyframes rhythm-merge-reveal {
+          0% { transform: scale(0.88); opacity: 0; }
+          45% { transform: scale(0.96); opacity: 0.88; }
+          100% { transform: scale(1); opacity: 1; }
         }
       `}</style>
 
@@ -3787,28 +3791,8 @@ export default function GamePage() {
         )}
 
         {mode === "rhythm" && (
-          <>
-          {rhythmOverlayActive && (
-            <div className="fixed inset-0 z-[80] pointer-events-none flex items-center justify-center">
-              <div className="absolute inset-0 bg-black/45" />
-              <span
-                key={`${rhythmPhase}-${rhythmCountdownLabel ?? "none"}-${rhythmTier}`}
-                className="relative text-6xl sm:text-7xl font-black tracking-tight text-white drop-shadow-[0_0_18px_rgba(56,189,248,0.75)]"
-                style={{ animation: "rhythm-clear-float 0.45s ease-out both" }}
-              >
-                {rhythmPhase === "tier2_ment"
-                  ? "2단계"
-                  : rhythmCountdownLabel === "go"
-                  ? "GO!"
-                  : rhythmCountdownLabel ?? ""}
-              </span>
-            </div>
-          )}
-          <section
-            className="relative overflow-hidden rounded-3xl border border-fuchsia-400/35 bg-gradient-to-b from-purple-900/50 via-slate-950/80 to-black p-5 space-y-4 min-h-[300px]"
-            style={rhythmOverlayActive ? { visibility: "hidden" } : undefined}
-          >
-            <div className="flex items-center justify-between">
+          <section className="relative overflow-hidden rounded-3xl border border-fuchsia-400/35 bg-gradient-to-b from-purple-900/50 via-slate-950/80 to-black p-5 min-h-[320px]">
+            <div className="relative z-50 flex items-center justify-between pb-3">
               <h2 className="text-lg font-extrabold text-fuchsia-200">AI 리듬 따라잡기</h2>
               <button
                 type="button"
@@ -3821,18 +3805,15 @@ export default function GamePage() {
                 코너 선택으로
               </button>
             </div>
-
+            <div
+              className={`space-y-4 transition-all duration-500 ease-out ${
+                rhythmOverlayActive
+                  ? "opacity-[0.28] brightness-[0.42] saturate-[0.75] pointer-events-none select-none"
+                  : "opacity-100 brightness-100 saturate-100"
+              }`}
+            >
             {rhythmPhase === "cleared" ? (
-              <div className="text-center space-y-3 py-6">
-                {rhythmClearFlash ? (
-                  <span
-                    key={rhythmClearFloatKey}
-                    className="inline-block text-3xl font-black text-cyan-100"
-                    style={{ animation: "duel-stars 0.5s ease-out both" }}
-                  >
-                    CLEAR!
-                  </span>
-                ) : null}
+              <div className="relative text-center py-6 min-h-[140px]">
                 <button
                   type="button"
                   onClick={() => {
@@ -3845,8 +3826,14 @@ export default function GamePage() {
                 </button>
               </div>
             ) : (
-              <div className="relative">
-                <div className="grid grid-cols-3 gap-2">
+              <div className="relative min-h-[110px]">
+                <div
+                  className={`grid grid-cols-3 gap-2 transition-all duration-[800ms] ease-out ${
+                    rhythmPhase === "merging"
+                      ? "opacity-0 blur-md scale-[0.96] pointer-events-none"
+                      : "opacity-100 blur-0 scale-100"
+                  }`}
+                >
                   {([0, 1, 2] as const).map((idx) => {
                     const merging = rhythmPhase === "merging";
                     const chunkAudible =
@@ -3860,21 +3847,13 @@ export default function GamePage() {
                         anim = "rhythm-chunk-idle 2.2s ease-in-out infinite";
                       }
                     }
-                    const mergeStyle =
-                      merging
-                        ? idx === 0
-                          ? { transform: "translateX(42%) scale(0.84)", opacity: 0.65 }
-                          : idx === 1
-                          ? { transform: "translateX(0) scale(0.87)", opacity: 0.72 }
-                          : { transform: "translateX(-42%) scale(0.84)", opacity: 0.65 }
-                        : undefined;
                     return (
                       <button
                         key={idx}
                         type="button"
                         disabled={rhythmPhase !== "play" || merging}
                         onClick={() => replayRhythmChunk(idx)}
-                        className={`rounded-xl border px-2 py-4 text-center text-xs sm:text-sm font-semibold leading-snug transition min-h-[92px] ${
+                        className={`rounded-xl border px-2 py-4 text-center text-xs sm:text-sm font-semibold leading-snug min-h-[92px] ${
                           chunkAudible
                             ? rhythmTier === 1
                               ? "border-fuchsia-300/70 bg-fuchsia-500/30 text-white shadow-[0_0_20px_rgba(217,70,239,0.35)]"
@@ -3883,23 +3862,25 @@ export default function GamePage() {
                             ? "border-fuchsia-200/35 bg-fuchsia-900/20 text-fuchsia-50"
                             : "border-sky-200/35 bg-sky-900/20 text-sky-50"
                         } ${rhythmPhase === "play" && !merging ? "cursor-pointer hover:bg-white/10" : "cursor-default"}`}
-                        style={{
-                          ...mergeStyle,
-                          animation: anim,
-                        }}
+                        style={{ animation: anim }}
                       >
                         {rhythmLine.chunks[idx]}
                       </button>
                     );
                   })}
                 </div>
-                {rhythmPhase === "merging" ? (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-full max-w-xl rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-6 py-6 text-lg sm:text-xl font-black text-cyan-50 text-center shadow-[0_0_30px_rgba(56,189,248,0.45)] animate-[rhythm-clear-float_0.85s_ease-out_both]">
-                      {rhythmLine.full}
-                    </div>
+                <div
+                  className={`absolute inset-0 z-10 flex items-center justify-center px-2 transition-all duration-[800ms] ease-out ${
+                    rhythmPhase === "merging"
+                      ? "opacity-100 delay-100"
+                      : "opacity-0 pointer-events-none delay-0"
+                  }`}
+                  aria-hidden={rhythmPhase !== "merging"}
+                >
+                  <div className="w-full max-w-xl rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-6 py-6 text-lg sm:text-xl font-black text-cyan-50 text-center shadow-[0_0_30px_rgba(56,189,248,0.45)]">
+                    {rhythmLine.full}
                   </div>
-                ) : null}
+                </div>
               </div>
             )}
 
@@ -3939,8 +3920,44 @@ export default function GamePage() {
             >
               다음 문장
             </button>
+            </div>
+
+            {rhythmClearFlash && rhythmPhase === "cleared" ? (
+              <div className="absolute inset-0 z-[46] flex items-center justify-center rounded-3xl pointer-events-none">
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-slate-950/95 via-violet-950/92 to-slate-950/98" />
+                <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(ellipse_at_50%_40%,rgba(56,189,248,0.22),transparent_58%)]" />
+                <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(ellipse_at_80%_80%,rgba(217,70,239,0.12),transparent_50%)]" />
+                <div className="absolute inset-3 rounded-2xl border border-white/10 bg-black/25 shadow-[inset_0_0_40px_rgba(0,0,0,0.45)]" />
+                <span
+                  key={rhythmClearFloatKey}
+                  className="relative z-10 text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-[0_0_22px_rgba(56,189,248,0.85)]"
+                  style={{ animation: "rhythm-clear-overlay 0.72s ease-out forwards" }}
+                >
+                  CLEAR!
+                </span>
+              </div>
+            ) : null}
+
+            {rhythmOverlayActive ? (
+              <div className="absolute inset-0 z-40 flex items-center justify-center rounded-3xl pointer-events-none">
+                <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-slate-950/95 via-violet-950/92 to-slate-950/98" />
+                <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(ellipse_at_50%_40%,rgba(56,189,248,0.22),transparent_58%)]" />
+                <div className="absolute inset-0 rounded-3xl bg-[radial-gradient(ellipse_at_80%_80%,rgba(217,70,239,0.12),transparent_50%)]" />
+                <div className="absolute inset-3 rounded-2xl border border-white/10 bg-black/25 shadow-[inset_0_0_40px_rgba(0,0,0,0.45)]" />
+                <span
+                  key={`${rhythmPhase}-${rhythmCountdownLabel ?? "none"}-${rhythmTier}`}
+                  className="relative z-10 text-5xl sm:text-6xl font-black tracking-tight text-white drop-shadow-[0_0_22px_rgba(56,189,248,0.85)]"
+                  style={{ animation: "rhythm-clear-float 0.45s ease-out both" }}
+                >
+                  {rhythmPhase === "tier2_ment"
+                    ? "Great!"
+                    : rhythmCountdownLabel === "go"
+                    ? "GO!"
+                    : rhythmCountdownLabel ?? ""}
+                </span>
+              </div>
+            ) : null}
           </section>
-          </>
         )}
 
         {mode === "repair" && (

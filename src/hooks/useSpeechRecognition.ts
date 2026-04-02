@@ -98,8 +98,14 @@ export function useSpeechRecognition(options?: {
     recognition.interimResults = true;
     recognition.onresult = (e: SpeechRecognitionEventLike) => {
       if (!e?.results?.length) return;
-      const last = e.results[e.results.length - 1];
-      const transcript = last?.[0]?.transcript ? String(last[0].transcript).trim() : "";
+      // 마지막 결과만 쓰면(특히 continuous + 모바일 Safari/Chrome) 앞 구간이 빠져
+      // PC/모바일 간 "글자가 떨어지는" 차이가 난다. 세션 내 모든 result를 이어 붙인다.
+      const parts: string[] = [];
+      for (let i = 0; i < e.results.length; i++) {
+        const piece = e.results[i]?.[0]?.transcript;
+        if (piece) parts.push(String(piece).trim());
+      }
+      const transcript = parts.join(" ").trim();
       if (!transcript) return;
       setInterimText(transcript);
       onInterimCb.current?.(transcript);
