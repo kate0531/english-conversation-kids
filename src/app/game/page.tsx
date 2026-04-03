@@ -1280,6 +1280,7 @@ export default function GamePage() {
       unlockAudioContext();
       setRhythmPhase("countdown");
       const fast = !!opts?.fast;
+      const ttsOpts = fast ? ({ fast: true, rhythmTier2: true } as const) : { fast: false as const };
       const seq: Array<"3" | "2" | "1" | "go"> = ["3", "2", "1", "go"];
       for (const label of seq) {
         if (rhythmPlaybackTokenRef.current !== token) return;
@@ -1299,13 +1300,19 @@ export default function GamePage() {
       for (let i = 0; i < 3; i += 1) {
         if (rhythmPlaybackTokenRef.current !== token) return;
         setRhythmDemoChunk(i as 0 | 1 | 2);
-        await speakHintAndWait(line.chunks[i], { fast });
+        await speakHintAndWait(line.chunks[i], ttsOpts);
       }
       if (rhythmPlaybackTokenRef.current !== token) return;
       setRhythmDemoChunk(null);
+      await new Promise<void>((r) => window.setTimeout(r, 480));
+      if (rhythmPlaybackTokenRef.current !== token) return;
+      await speakHintAndWait(line.full, ttsOpts);
+      if (rhythmPlaybackTokenRef.current !== token) return;
+      resetSharedTranscript();
+      setRhythmInput("");
       setRhythmPhase("play");
     },
-    [speakHintAndWait]
+    [speakHintAndWait, resetSharedTranscript]
   );
 
   const beginRhythmRound = useCallback(() => {
@@ -1331,13 +1338,19 @@ export default function GamePage() {
     const spoken = normalizeHeardText(rhythmInput) || normalizeHeardText(liveTranscript);
     if (!spoken.trim()) {
       playBuzzer();
+      resetSharedTranscript();
+      setRhythmInput("");
       return;
     }
     if (!isSentenceMatch(spoken, rhythmLine.full)) {
       playBuzzer();
+      resetSharedTranscript();
+      setRhythmInput("");
       return;
     }
     playPop();
+    resetSharedTranscript();
+    setRhythmInput("");
     if (rhythmTier === 1) {
       stopRhythmDanceBgm();
       rhythmPlaybackTokenRef.current += 1;
@@ -1360,7 +1373,7 @@ export default function GamePage() {
         setRhythmClearFloatKey((k) => k + 1);
       }, 1000);
     }
-  }, [rhythmPhase, rhythmTier, rhythmLine, rhythmInput, liveTranscript, runRhythmCountdownDemoAndUnlock]);
+  }, [rhythmPhase, rhythmTier, rhythmLine, rhythmInput, liveTranscript, runRhythmCountdownDemoAndUnlock, resetSharedTranscript]);
 
   const replayRhythmChunk = useCallback(
     (idx: 0 | 1 | 2) => {
@@ -1369,7 +1382,7 @@ export default function GamePage() {
       setRhythmManualChunk(idx);
       if (rhythmManualChunkClearRef.current) window.clearTimeout(rhythmManualChunkClearRef.current);
       const fast = rhythmTier === 2;
-      speakHint(rhythmLine.chunks[idx], { fast });
+      speakHint(rhythmLine.chunks[idx], fast ? { fast: true, rhythmTier2: true } : { fast: false });
       const tid = window.setTimeout(() => {
         setRhythmManualChunk(null);
         rhythmManualChunkClearRef.current = null;
@@ -1440,6 +1453,8 @@ export default function GamePage() {
       setAlphaShake(true);
       window.setTimeout(() => setAlphaShake(false), 500);
       setAlphaMessage("단어를 말하거나 입력해 주세요.");
+      resetSharedTranscript();
+      setAlphaInput("");
       return;
     }
     const need = alphaLetter.toLowerCase();
@@ -1448,6 +1463,8 @@ export default function GamePage() {
       setAlphaShake(true);
       window.setTimeout(() => setAlphaShake(false), 500);
       setAlphaMessage(`"${alphaLetter}"로 시작해야 해요. 다시 도전!`);
+      resetSharedTranscript();
+      setAlphaInput("");
       return;
     }
     if (alphaWords.includes(w)) {
@@ -1455,6 +1472,8 @@ export default function GamePage() {
       setAlphaShake(true);
       window.setTimeout(() => setAlphaShake(false), 500);
       setAlphaMessage("이미 말한 단어예요. 새로운 단어로!");
+      resetSharedTranscript();
+      setAlphaInput("");
       return;
     }
     playPop();
@@ -1486,6 +1505,8 @@ export default function GamePage() {
   const submitTongueTry = useCallback(() => {
     const spoken = normalizeHeardText(tongueInput) || normalizeHeardText(liveTranscript);
     if (isSentenceMatch(spoken, tongueLine.text)) {
+      resetSharedTranscript();
+      setTongueInput("");
       playTransition();
       setTongueSuccess(true);
       setTongueCrownBurst(true);
@@ -1495,8 +1516,10 @@ export default function GamePage() {
       setTongueShake(true);
       setTongueAttempts((a) => a + 1);
       window.setTimeout(() => setTongueShake(false), 500);
+      resetSharedTranscript();
+      setTongueInput("");
     }
-  }, [tongueInput, liveTranscript, tongueLine.text]);
+  }, [tongueInput, liveTranscript, tongueLine.text, resetSharedTranscript]);
 
   const triggerWordChainCelebration = useCallback(() => {
     if (!wordChainFinished) return;
@@ -1517,6 +1540,8 @@ export default function GamePage() {
     if (spokenWords.length === 0) {
       setMemoryMessage("입력된 단어가 없어요. 음성 또는 텍스트로 5개 단어를 말해 주세요.");
       playBuzzer();
+      resetSharedTranscript();
+      setMemoryInput("");
       return;
     }
 
@@ -1541,13 +1566,15 @@ export default function GamePage() {
       }
       playDefeatBlast();
       playBuzzer();
+      resetSharedTranscript();
+      setMemoryInput("");
       return;
     }
 
     setMemoryRevealed([true, true, true, true, true]);
     setMemoryPopped(4);
+    resetSharedTranscript();
     setMemoryInput("");
-    setLiveTranscript("");
     playTransition();
     window.setTimeout(() => setMemoryPopped((current) => (current === 4 ? null : current)), 320);
     setMemoryCompleted(true);
@@ -1564,6 +1591,7 @@ export default function GamePage() {
     memoryRound.words,
     memoryWrongCount,
     memoryReplayLeft,
+    resetSharedTranscript,
   ]);
 
   const submitFrogTry = useCallback(() => {
@@ -1572,6 +1600,8 @@ export default function GamePage() {
     if (!sourceText) {
       setFrogMessage("입력된 문장이 없어요. 음성 또는 텍스트로 반대로 말해보세요.");
       playBuzzer();
+      resetSharedTranscript();
+      setFrogInput("");
       return;
     }
 
@@ -1581,6 +1611,8 @@ export default function GamePage() {
       setFrogSuccess(true);
       setFrogCelebrate(true);
       setFrogMessage("PASS! 반대로 말하기 성공!");
+      resetSharedTranscript();
+      setFrogInput("");
       playFrogCroak();
       playVictoryBlast();
       playTransition();
@@ -1597,18 +1629,24 @@ export default function GamePage() {
     playFrogCroak();
     playDefeatBlast();
     playBuzzer();
-  }, [frogSuccess, frogInput, liveTranscript, frogPuzzle.opposite]);
+    resetSharedTranscript();
+    setFrogInput("");
+  }, [frogSuccess, frogInput, liveTranscript, frogPuzzle.opposite, resetSharedTranscript]);
 
   const submitTreasureTry = useCallback(() => {
     if (!treasureOpened) {
       setTreasureMessage("먼저 보물상자를 열어 단어를 확인해보세요.");
       playBuzzer();
+      resetSharedTranscript();
+      setTreasureInput("");
       return;
     }
     const sourceText = normalizeHeardText(treasureInput) || normalizeHeardText(liveTranscript);
     if (!sourceText) {
       setTreasureMessage("문장을 말하거나 입력해 주세요.");
       playBuzzer();
+      resetSharedTranscript();
+      setTreasureInput("");
       return;
     }
 
@@ -1620,6 +1658,8 @@ export default function GamePage() {
       setTreasureSuccess(true);
       setTreasureCoinBurst(true);
       setTreasureMessage("");
+      resetSharedTranscript();
+      setTreasureInput("");
       playVictoryBlast();
       playTransition();
       window.setTimeout(() => setTreasureCoinBurst(false), 1200);
@@ -1632,11 +1672,18 @@ export default function GamePage() {
     playDefeatBlast();
     playBuzzer();
     window.setTimeout(() => setTreasureFailBurst(false), 980);
-  }, [treasureOpened, treasureInput, liveTranscript, treasureWord.word]);
+    resetSharedTranscript();
+    setTreasureInput("");
+  }, [treasureOpened, treasureInput, liveTranscript, treasureWord.word, resetSharedTranscript]);
 
   const submitTwentyGuess = useCallback(() => {
     const raw = twentyGuess.trim();
-    if (!raw || twentySolved) return;
+    if (twentySolved) return;
+    if (!raw) {
+      resetSharedTranscript();
+      setTwentyGuess("");
+      return;
+    }
     setTwentyRecentGuesses((prev) => [raw, ...prev].slice(0, 6));
     const guess = raw.toLowerCase().replace(/[^a-z]/g, "");
     const answer = twentyQuestion.answer.toLowerCase();
@@ -1647,6 +1694,8 @@ export default function GamePage() {
     if (correct) {
       setTwentySolved(true);
       setTwentyMessage("정답! PASS!");
+      resetSharedTranscript();
+      setTwentyGuess("");
       playVictoryBlast();
       playTransition();
       return;
@@ -1659,18 +1708,26 @@ export default function GamePage() {
       setTwentyMessage("조금 더 생각해봐요! 다시 추측!");
     }
     playBuzzer();
-  }, [twentyGuess, twentySolved, twentyQuestion.answer, twentyHintMode]);
+    resetSharedTranscript();
+    setTwentyGuess("");
+  }, [twentyGuess, twentySolved, twentyQuestion.answer, twentyHintMode, resetSharedTranscript]);
 
   const submitPasswordTry = useCallback(() => {
     const spoken = tokenizeSentence(passwordTranscript);
     const answer = passwordPuzzle.answerWords.map((w) => normalizeWord(w));
-    if (spoken.length === 0) return;
+    if (spoken.length === 0) {
+      resetSharedTranscript();
+      setPasswordTranscript("");
+      return;
+    }
     const isExact =
       spoken.length === answer.length &&
       answer.every((word, idx) => spoken[idx] === word);
 
     if (isExact) {
       setPasswordUnlocked(true);
+      resetSharedTranscript();
+      setPasswordTranscript("");
       playVictoryBlast();
       playTransition();
       return;
@@ -1681,17 +1738,26 @@ export default function GamePage() {
     playBuzzer();
     playDefeatBlast();
     window.setTimeout(() => setPasswordShake(false), 520);
-  }, [passwordTranscript, passwordPuzzle.answerWords]);
+    resetSharedTranscript();
+    setPasswordTranscript("");
+  }, [passwordTranscript, passwordPuzzle.answerWords, resetSharedTranscript]);
 
   const submitRepairTry = useCallback(() => {
     const spoken = repairTranscript.trim();
-    if (!spoken || repairRecovered) return;
+    if (repairRecovered) return;
+    if (!spoken) {
+      resetSharedTranscript();
+      setRepairTranscript("");
+      return;
+    }
     const correct = isSentenceMatch(spoken, repairPuzzle.fixed);
     setRepairAttempts((prev) => prev + 1);
 
     if (correct) {
       setRepairRecovered(true);
       setRepairMessage("정상 복구 완료!");
+      resetSharedTranscript();
+      setRepairTranscript("");
       playVictoryBlast();
       playTransition();
       return;
@@ -1703,7 +1769,9 @@ export default function GamePage() {
     playBuzzer();
     playDefeatBlast();
     window.setTimeout(() => setRepairShake(false), 520);
-  }, [repairTranscript, repairRecovered, repairPuzzle.fixed]);
+    resetSharedTranscript();
+    setRepairTranscript("");
+  }, [repairTranscript, repairRecovered, repairPuzzle.fixed, resetSharedTranscript]);
 
   const submitWordChainTurn = useCallback(() => {
     if (wordChainFinished) return;
@@ -1714,6 +1782,8 @@ export default function GamePage() {
       setWordChainGaugeTrend("down");
       playBuzzer();
       window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      resetSharedTranscript();
+      setWordChainInput("");
       return;
     }
 
@@ -1724,6 +1794,8 @@ export default function GamePage() {
       setWordChainMessage(`"${expectedFirst.toUpperCase()}"로 시작해야 해요. 다시 도전!`);
       playBuzzer();
       window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      resetSharedTranscript();
+      setWordChainInput("");
       return;
     }
 
@@ -1734,6 +1806,8 @@ export default function GamePage() {
       setWordChainMessage("이미 나온 단어예요. 새로운 단어로 이어가요!");
       playDefeatBlast();
       window.setTimeout(() => setWordChainGaugeTrend("none"), 260);
+      resetSharedTranscript();
+      setWordChainInput("");
       return;
     }
 
@@ -1752,8 +1826,8 @@ export default function GamePage() {
       setWordChainHistory(updatedHistory);
       setWordChainFinished(true);
       setWordChainMessage("20턴 클리어! 끝말잇기 미션 성공!");
+      resetSharedTranscript();
       setWordChainInput("");
-      setLiveTranscript("");
       playVictoryBlast();
       playTransition();
       window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
@@ -1765,8 +1839,8 @@ export default function GamePage() {
       setWordChainCurrent(word);
       setWordChainFinished(true);
       setWordChainMessage("AI가 더 이상 단어를 못 찾았어요! 당신 승리!");
+      resetSharedTranscript();
       setWordChainInput("");
-      setLiveTranscript("");
       playVictoryBlast();
       playTransition();
       window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
@@ -1778,11 +1852,19 @@ export default function GamePage() {
     setWordChainHistory([...updatedHistory, aiEntry]);
     setWordChainCurrent(aiCandidate);
     setWordChainTurn((prev) => prev + 1);
+    resetSharedTranscript();
     setWordChainInput("");
-    setLiveTranscript("");
     setWordChainMessage(`AI: ${aiCandidate.toUpperCase()} / 다음은 "${nextRequired}"로 시작!`);
     window.setTimeout(() => setWordChainGaugeTrend("none"), 300);
-  }, [wordChainFinished, wordChainInput, liveTranscript, wordChainCurrent, wordChainHistory, wordChainTurn]);
+  }, [
+    wordChainFinished,
+    wordChainInput,
+    liveTranscript,
+    wordChainCurrent,
+    wordChainHistory,
+    wordChainTurn,
+    resetSharedTranscript,
+  ]);
 
   useEffect(() => {
     if (bombPhase !== "countdown") return;
@@ -1884,9 +1966,11 @@ export default function GamePage() {
     setBombSuccess(success);
     setBombMessage(success ? "" : "이번에는 소리가 잘 안 잡혔어요. 더 크게, 또렷하게 한 번 더!");
     setBombPhase("result");
+    resetSharedTranscript();
+    setBombInputText("");
     if (success) playTransition();
     else playBuzzer();
-  }, [bombPhase, isListening, isProcessing, liveTranscript, bombInputText, bombMission.targetSentences]);
+  }, [bombPhase, isListening, isProcessing, liveTranscript, bombInputText, bombMission.targetSentences, resetSharedTranscript]);
 
   useEffect(() => {
     if (duelPhase !== "judging" || isListening || isProcessing) return;
@@ -1925,7 +2009,9 @@ export default function GamePage() {
       playLaserPulse();
     }
     setDuelPhase("result");
-  }, [duelPhase, isListening, isProcessing, liveTranscript, duelInputText]);
+    resetSharedTranscript();
+    setDuelInputText("");
+  }, [duelPhase, isListening, isProcessing, liveTranscript, duelInputText, resetSharedTranscript]);
 
   // 녹음 종료 직후 isListening/isProcessing이 둘 다 false가 되므로,
   // "둘 중 하나일 때만 동기화" 가드가 있으면 Whisper 최종 텍스트가 필드에 안 들어감.
@@ -2873,7 +2959,7 @@ export default function GamePage() {
                 placeholder="정답을 영어 단어로 입력하세요."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitTwentyGuess}
@@ -3019,7 +3105,7 @@ export default function GamePage() {
                 placeholder="음성 인식이 약하면 문장을 직접 입력해도 됩니다."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitPasswordTry}
@@ -3120,7 +3206,7 @@ export default function GamePage() {
                 placeholder="음성 인식이 약하면 반대 문장을 직접 입력해도 됩니다."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-lime-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitFrogTry}
@@ -3262,7 +3348,7 @@ export default function GamePage() {
                 placeholder='공개된 단어를 포함한 문장을 말하거나 입력하세요.'
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitTreasureTry}
@@ -3359,7 +3445,7 @@ export default function GamePage() {
                 placeholder="음성 인식이 약하면 단어를 직접 입력해도 됩니다."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitMemoryWord}
@@ -3508,7 +3594,7 @@ export default function GamePage() {
                 placeholder="끝 글자로 시작하는 영어 단어를 말하거나 입력하세요."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitWordChainTurn}
@@ -3681,7 +3767,7 @@ export default function GamePage() {
                 disabled={!alphaLetter || alphaRolling || alphaExpired}
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300/60 disabled:opacity-50"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitAlphaWord}
@@ -3770,7 +3856,7 @@ export default function GamePage() {
                 disabled={tongueSuccess}
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60 disabled:opacity-50"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitTongueTry}
@@ -3818,7 +3904,7 @@ export default function GamePage() {
                   type="button"
                   onClick={() => {
                     playClick();
-                    speakHint(rhythmLine.full, { fast: true });
+                    speakHint(rhythmLine.full, { fast: true, rhythmTier2: true });
                   }}
                   className="mx-auto block w-full max-w-xl rounded-2xl border border-cyan-200/75 bg-cyan-400/25 px-6 py-6 text-lg sm:text-xl font-black text-cyan-50 shadow-[0_0_30px_rgba(56,189,248,0.45)] hover:bg-cyan-300/35 transition"
                 >
@@ -3884,34 +3970,38 @@ export default function GamePage() {
               </div>
             )}
 
-            {sttError ? (
-              <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
-                {sttError}
-              </p>
-            ) : null}
+            {rhythmPhase !== "cleared" ? (
+              <>
+                {sttError ? (
+                  <p className="text-xs text-amber-100 bg-amber-500/20 border border-amber-400/30 rounded-lg px-3 py-2">
+                    {sttError}
+                  </p>
+                ) : null}
 
-            <div className="flex items-center gap-2">
-              <input
-                value={rhythmInput}
-                onChange={(e) => {
-                  setRhythmInput(e.target.value);
-                  setLiveTranscript(e.target.value);
-                }}
-                onKeyDown={(e) => e.key === "Enter" && submitRhythmTry()}
-                placeholder="음성 인식이 안 되면 텍스트를 입력하세요."
-                disabled={rhythmPhase !== "play"}
-                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60 disabled:opacity-50"
-              />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
-              <button
-                type="button"
-                onClick={submitRhythmTry}
-                disabled={rhythmPhase !== "play"}
-                className="px-3.5 py-2.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white text-sm font-medium disabled:opacity-50"
-              >
-                제출
-              </button>
-            </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={rhythmInput}
+                    onChange={(e) => {
+                      setRhythmInput(e.target.value);
+                      setLiveTranscript(e.target.value);
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && submitRhythmTry()}
+                    placeholder="음성 인식이 안 되면 텍스트를 입력하세요."
+                    disabled={rhythmPhase !== "play"}
+                    className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60 disabled:opacity-50"
+                  />
+                  <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
+                  <button
+                    type="button"
+                    onClick={submitRhythmTry}
+                    disabled={rhythmPhase !== "play"}
+                    className="px-3.5 py-2.5 rounded-xl bg-fuchsia-500 hover:bg-fuchsia-400 text-white text-sm font-medium disabled:opacity-50"
+                  >
+                    제출
+                  </button>
+                </div>
+              </>
+            ) : null}
 
             <button
               type="button"
@@ -4043,7 +4133,7 @@ export default function GamePage() {
                 placeholder="고친 문장을 영어로 말하거나 입력하세요."
                 className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-amber-300/60"
               />
-              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
+              <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
                 type="button"
                 onClick={submitRepairTry}

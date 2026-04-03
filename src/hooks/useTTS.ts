@@ -73,7 +73,11 @@ function getMaleVoice(voices: SpeechSynthesisVoice[], person: TTSVoicePerson): S
   return index >= 0 ? list[index] : list[0];
 }
 
-export type SpeakOptions = { fast?: boolean };
+export type SpeakOptions = {
+  fast?: boolean;
+  /** 리듬 따라잡기 2회차: `fast`보다 한 단계 더 빠른 재생 */
+  rhythmTier2?: boolean;
+};
 
 function speakWithBrowser(
   text: string,
@@ -90,18 +94,19 @@ function speakWithBrowser(
 
   const voices = window.speechSynthesis.getVoices();
   const fast = !!opts?.fast;
+  const rhythm2 = !!opts?.rhythmTier2;
   if (lang === "ko-KR") {
-    u.rate = fast ? 1.08 : 0.95;
+    u.rate = rhythm2 ? 1.18 : fast ? 1.08 : 0.95;
     u.pitch = 1.1;
     const voice = getKoreanFemaleVoice(voices);
     if (voice) u.voice = voice;
   } else if (gender === "female") {
-    u.rate = fast ? 1.2 : 0.92;
+    u.rate = rhythm2 ? 1.38 : fast ? 1.2 : 0.92;
     u.pitch = 1.15;
     const voice = getKindFemaleVoice(voices);
     if (voice) u.voice = voice;
   } else {
-    u.rate = fast ? 1.05 : 0.85;
+    u.rate = rhythm2 ? 1.18 : fast ? 1.05 : 0.85;
     u.pitch = 0.98;
     const voice = getMaleVoice(voices, person);
     if (voice) u.voice = voice;
@@ -200,6 +205,7 @@ function speakWithBrowserAndWait(
   if (typeof window === "undefined" || !window.speechSynthesis) return Promise.resolve(false);
   window.speechSynthesis.cancel();
   const fast = !!opts?.fast;
+  const rhythm2 = !!opts?.rhythmTier2;
   return new Promise((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = lang;
@@ -207,17 +213,17 @@ function speakWithBrowserAndWait(
 
     const voices = window.speechSynthesis.getVoices();
     if (lang === "ko-KR") {
-      u.rate = fast ? 1.04 : 0.92;
+      u.rate = rhythm2 ? 1.14 : fast ? 1.04 : 0.92;
       u.pitch = 1.08;
       const voice = getKoreanFemaleVoice(voices);
       if (voice) u.voice = voice;
     } else if (gender === "female") {
-      u.rate = fast ? 1.14 : 0.88;
+      u.rate = rhythm2 ? 1.36 : fast ? 1.14 : 0.88;
       u.pitch = 1.12;
       const voice = getKindFemaleVoice(voices);
       if (voice) u.voice = voice;
     } else {
-      u.rate = fast ? 0.98 : 0.82;
+      u.rate = rhythm2 ? 1.12 : fast ? 0.98 : 0.82;
       u.pitch = 0.98;
       const voice = getMaleVoice(voices, person);
       if (voice) u.voice = voice;
@@ -414,7 +420,7 @@ export function useTTS(options: { gender?: TTSVoiceType; voicePerson?: TTSVoiceP
       const voice = pickOpenAIVoice(gender, lang);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 140);
-      const apiRate = options?.fast ? 1.26 : 1;
+      const apiRate = options?.rhythmTier2 ? 1.48 : options?.fast ? 1.26 : 1;
       const result = await playTTSViaAPI(normalized, voice, controller.signal, apiRate);
       clearTimeout(timeout);
       if (result.ok) return true;
