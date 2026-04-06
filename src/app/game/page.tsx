@@ -922,6 +922,25 @@ function isSentenceMatch(spoken: string, expected: string): boolean {
   return a.every((word, idx) => word === b[idx]);
 }
 
+function getRepairHintParts(broken: string, fixed: string): Array<{ text: string; isWrong: boolean }> {
+  const brokenParts = broken.trim().split(/\s+/).filter(Boolean);
+  const fixedParts = fixed.trim().split(/\s+/).filter(Boolean);
+  const maxLen = Math.max(brokenParts.length, fixedParts.length);
+  const result: Array<{ text: string; isWrong: boolean }> = [];
+
+  for (let i = 0; i < maxLen; i += 1) {
+    const brokenWord = brokenParts[i];
+    if (!brokenWord) continue;
+    const fixedWord = fixedParts[i] ?? "";
+    result.push({
+      text: brokenWord,
+      isWrong: normalizeWord(brokenWord) !== normalizeWord(fixedWord),
+    });
+  }
+
+  return result;
+}
+
 function normalizeHeardText(text: string): string {
   const trimmed = text.trim();
   const lower = trimmed.toLowerCase();
@@ -988,6 +1007,10 @@ export default function GamePage() {
   const [repairRecovered, setRepairRecovered] = useState(false);
   const [repairShake, setRepairShake] = useState(false);
   const [repairMessage, setRepairMessage] = useState("고장 문장을 고쳐서 영어로 말해보세요.");
+  const repairHintParts = useMemo(
+    () => getRepairHintParts(repairPuzzle.broken, repairPuzzle.fixed),
+    [repairPuzzle.broken, repairPuzzle.fixed]
+  );
 
   const [wordChainCurrent, setWordChainCurrent] = useState("apple");
   const [wordChainInput, setWordChainInput] = useState("");
@@ -4084,7 +4107,17 @@ export default function GamePage() {
             </div>
 
             <div className="rounded-2xl border border-red-300/45 bg-red-500/15 p-4 shadow-[0_0_24px_rgba(248,113,113,0.35)]">
-              <p className="text-lg font-semibold text-red-50">{repairPuzzle.broken}</p>
+              <p className="text-lg font-semibold text-red-50 leading-relaxed">
+                {repairHintParts.map((part, idx) => (
+                  <span
+                    key={`repair-hint-${idx}-${part.text}`}
+                    className={part.isWrong ? "text-red-300" : "text-red-50"}
+                  >
+                    {part.text}
+                    {idx < repairHintParts.length - 1 ? " " : ""}
+                  </span>
+                ))}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-emerald-300/35 bg-emerald-500/10 p-4">
