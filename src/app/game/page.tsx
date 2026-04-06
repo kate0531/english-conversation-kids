@@ -603,7 +603,7 @@ const REPAIR_PUZZLES: RepairPuzzle[] = [
   { id: "r-20", broken: "He writed three letter yesterday.", fixed: "He wrote three letters yesterday.", focus: "plural" },
 ];
 
-const WORD_CHAIN_MAX_TURN = 20;
+const WORD_CHAIN_MAX_TURN = 10;
 const WORD_CHAIN_WORDS = [
   "apple", "eagle", "earth", "heart", "tiger", "rabbit", "turtle", "energy", "yellow", "window",
   "whale", "ear", "robot", "teacher", "rain", "night", "table", "engine", "elbow", "water",
@@ -1789,7 +1789,7 @@ export default function GamePage() {
 
     const expectedFirst = getLastLetter(wordChainCurrent);
     if (!expectedFirst || word[0] !== expectedFirst) {
-      setWordChainGauge((prev) => Math.max(0, prev - 7));
+      setWordChainGauge((prev) => Math.max(0, prev - 10));
       setWordChainGaugeTrend("down");
       setWordChainMessage(`"${expectedFirst.toUpperCase()}"로 시작해야 해요. 다시 도전!`);
       playBuzzer();
@@ -1801,7 +1801,7 @@ export default function GamePage() {
 
     const usedWords = new Set(wordChainHistory.map((entry) => normalizeChainWord(entry.word)));
     if (usedWords.has(word)) {
-      setWordChainGauge((prev) => Math.max(0, prev - 6));
+      setWordChainGauge((prev) => Math.max(0, prev - 10));
       setWordChainGaugeTrend("down");
       setWordChainMessage("이미 나온 단어예요. 새로운 단어로 이어가요!");
       playDefeatBlast();
@@ -1818,14 +1818,14 @@ export default function GamePage() {
 
     const userEntry: WordChainEntry = { speaker: "me", word, turn: wordChainTurn };
     const updatedHistory = [...wordChainHistory, userEntry];
-    setWordChainGauge((prev) => Math.min(100, prev + 9));
+    setWordChainGauge((prev) => Math.min(100, prev + 10));
     setWordChainGaugeTrend("up");
     playLaserPulse();
 
     if (wordChainTurn >= WORD_CHAIN_MAX_TURN) {
       setWordChainHistory(updatedHistory);
       setWordChainFinished(true);
-      setWordChainMessage("20턴 클리어! 끝말잇기 미션 성공!");
+      setWordChainMessage("10턴 클리어! 끝말잇기 미션 성공!");
       resetSharedTranscript();
       setWordChainInput("");
       playVictoryBlast();
@@ -2436,7 +2436,7 @@ export default function GamePage() {
             >
               <p className="text-sm text-fuchsia-200">Arcade Relay</p>
               <h2 className="text-xl font-bold mt-1">AI랑 끝말잇기</h2>
-              <p className="text-sm text-white/80 mt-2">20턴 단어 릴레이 + 상승/하락 게이지</p>
+              <p className="text-sm text-white/80 mt-2">10턴 단어 릴레이 + 상승/하락 게이지</p>
             </button>
             <button
               type="button"
