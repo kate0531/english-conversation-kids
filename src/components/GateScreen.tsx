@@ -65,8 +65,17 @@ export default function GateScreen({ onSelectWriting, onSelectSpeaking }: GateSc
           className="flex-1 rounded-2xl p-6 border-2 border-cyan-400 bg-white/90 shadow-md hover:bg-cyan-50 hover:border-cyan-500 hover:shadow-lg transition-all duration-200 text-center no-underline"
         >
           <span className="text-2xl mb-2 block">🎮</span>
-          <span className="font-semibold text-gray-800 block">Game</span>
-          <span className="text-sm text-gray-500 mt-1 block">스피드·대결 발화 게임</span>
+          <span className="font-semibold text-gray-800 block">Game Arena</span>
+          <span className="text-sm text-gray-500 mt-1 block">개인 스피드·대결 발화 게임</span>
+        </Link>
+        <Link
+          href="/co-op-game"
+          onClick={playClick}
+          className="flex-1 rounded-2xl p-6 border-2 border-emerald-400 bg-white/90 shadow-md hover:bg-emerald-50 hover:border-emerald-500 hover:shadow-lg transition-all duration-200 text-center no-underline"
+        >
+          <span className="text-2xl mb-2 block">🤝</span>
+          <span className="font-semibold text-gray-800 block">협력 게임</span>
+          <span className="text-sm text-gray-500 mt-1 block">주간 랭킹 기반 공동 프로젝트</span>
         </Link>
       </div>
     </div>

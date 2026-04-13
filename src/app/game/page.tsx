@@ -987,7 +987,7 @@ export default function GamePage() {
   const [twentyHintMode, setTwentyHintMode] = useState<TwentyHintMode>("keywords");
   const [twentyAttempts, setTwentyAttempts] = useState(0);
   const [twentySolved, setTwentySolved] = useState(false);
-  const [twentyMessage, setTwentyMessage] = useState("단어 힌트를 보고 정답을 맞혀보세요.");
+  const [twentyMessage, setTwentyMessage] = useState("");
   const [twentyRecentGuesses, setTwentyRecentGuesses] = useState<string[]>([]);
 
   const [passwordPuzzle, setPasswordPuzzle] = useState<PasswordPuzzle>(() => {
@@ -1155,7 +1155,7 @@ export default function GamePage() {
     setTwentyHintMode("keywords");
     setTwentyAttempts(0);
     setTwentySolved(false);
-    setTwentyMessage("단어 힌트를 보고 정답을 맞혀보세요.");
+    setTwentyMessage("");
     setTwentyRecentGuesses([]);
   }, []);
 
@@ -1726,7 +1726,7 @@ export default function GamePage() {
 
     if (twentyHintMode === "keywords") {
       setTwentyHintMode("sentences");
-      setTwentyMessage("아쉽! 문장 힌트로 업그레이드!");
+      setTwentyMessage("");
     } else {
       setTwentyMessage("조금 더 생각해봐요! 다시 추측!");
     }
@@ -2192,7 +2192,7 @@ export default function GamePage() {
   const rhythmOverlayActive = rhythmCountdownLabel !== null || rhythmPhase === "tier2_ment";
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-b from-sky-100 via-fuchsia-50 to-amber-50 text-white relative overflow-hidden">
       <style jsx global>{`
         @keyframes float-up {
           0% { transform: translateY(120%) rotate(0deg); opacity: 0; }
@@ -2364,18 +2364,18 @@ export default function GamePage() {
         </span>
       ))}
 
-      <header className="relative z-10 border-b border-white/10 backdrop-blur bg-black/25">
+      <header className="relative z-10 border-b border-sky-200/70 backdrop-blur bg-white/70">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
           <HomeButton
             onClick={() => {
               playClick();
               router.push("/");
             }}
-            className="bg-white/10 border-white/20 text-white hover:bg-white/20 hover:border-white/40"
+            className="bg-white/90 border-sky-200 text-slate-700 hover:bg-white hover:border-sky-300"
           />
           <div>
-            <h1 className="text-lg font-semibold tracking-wide">Game Arena</h1>
-            <p className="text-xs text-white/70">말하기만 하면 점수 인정! 텐션 있게 GO!</p>
+            <h1 className="text-lg font-semibold tracking-wide text-slate-900">Game Arena</h1>
+            <p className="text-xs text-slate-600">영어 게임을 골라 시작해보세요</p>
           </div>
         </div>
       </header>
@@ -2390,11 +2390,11 @@ export default function GamePage() {
                 setMode("bomb");
                 setBombPhase("idle");
               }}
-              className="rounded-2xl border border-rose-300/40 bg-rose-500/20 hover:bg-rose-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-rose-300/40 bg-rose-500/20 hover:bg-rose-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-rose-200">Speed Game</p>
+              <p className="text-sm text-rose-700">Speed Game</p>
               <h2 className="text-xl font-bold mt-1">폭탄 돌리기</h2>
-              <p className="text-sm text-white/80 mt-2">10초 GO! 사운드 + 째깍째깍 + 폭발 텐션</p>
+              <p className="text-sm text-slate-700 mt-2">10초 안에 영어로 말하기</p>
             </button>
             <button
               type="button"
@@ -2403,11 +2403,11 @@ export default function GamePage() {
                 setMode("duel");
                 setDuelPhase("idle");
               }}
-              className="rounded-2xl border border-cyan-300/40 bg-cyan-500/20 hover:bg-cyan-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-cyan-300/40 bg-cyan-500/20 hover:bg-cyan-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-cyan-200">Battle Mode</p>
+              <p className="text-sm text-cyan-700">Battle Mode</p>
               <h2 className="text-xl font-bold mt-1">AI vs. Me</h2>
-              <p className="text-sm text-white/80 mt-2">줄다리기/광선검 느낌 대결 게이지</p>
+              <p className="text-sm text-slate-700 mt-2">AI와 말하기 대결</p>
             </button>
             <button
               type="button"
@@ -2416,11 +2416,11 @@ export default function GamePage() {
                 setMode("twenty");
                 beginTwentyRound();
               }}
-              className="rounded-2xl border border-emerald-300/40 bg-emerald-500/20 hover:bg-emerald-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-emerald-300/40 bg-emerald-500/20 hover:bg-emerald-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-emerald-200">Guessing Game</p>
+              <p className="text-sm text-emerald-700">Guessing Game</p>
               <h2 className="text-xl font-bold mt-1">AI랑 스무고개</h2>
-              <p className="text-sm text-white/80 mt-2">단어 힌트 → 문장 힌트 정답 맞히기</p>
+              <p className="text-sm text-slate-700 mt-2">힌트를 보고 정답 맞히기</p>
             </button>
             <button
               type="button"
@@ -2429,11 +2429,11 @@ export default function GamePage() {
                 setMode("password");
                 beginPasswordRound();
               }}
-              className="rounded-2xl border border-violet-300/40 bg-violet-500/20 hover:bg-violet-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-violet-300/40 bg-violet-500/20 hover:bg-violet-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-violet-200">Speaking Puzzle</p>
+              <p className="text-sm text-violet-700">Speaking Puzzle</p>
               <h2 className="text-xl font-bold mt-1">AI랑 자물쇠 풀기</h2>
-              <p className="text-sm text-white/80 mt-2">스크램블 순서 발화로 자물쇠 해제</p>
+              <p className="text-sm text-slate-700 mt-2">순서대로 말해 자물쇠 풀기</p>
             </button>
             <button
               type="button"
@@ -2442,11 +2442,11 @@ export default function GamePage() {
                 setMode("repair");
                 beginRepairRound();
               }}
-              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-amber-200">Grammar Repair</p>
+              <p className="text-sm text-amber-700">Grammar Repair</p>
               <h2 className="text-xl font-bold mt-1">고장난 AI 복구하기</h2>
-              <p className="text-sm text-white/80 mt-2">틀린 문장을 고쳐서 시스템 복구</p>
+              <p className="text-sm text-slate-700 mt-2">틀린 문장 고쳐 말하기</p>
             </button>
             <button
               type="button"
@@ -2455,11 +2455,11 @@ export default function GamePage() {
                 setMode("wordchain");
                 beginWordChainRound();
               }}
-              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-fuchsia-200">Arcade Relay</p>
+              <p className="text-sm text-fuchsia-700">Arcade Relay</p>
               <h2 className="text-xl font-bold mt-1">AI랑 끝말잇기</h2>
-              <p className="text-sm text-white/80 mt-2">10턴 단어 릴레이 + 상승/하락 게이지</p>
+              <p className="text-sm text-slate-700 mt-2">끝말잇기로 단어 이어가기</p>
             </button>
             <button
               type="button"
@@ -2468,11 +2468,11 @@ export default function GamePage() {
                 setMode("memory");
                 beginMemoryRound();
               }}
-              className="rounded-2xl border border-sky-300/40 bg-sky-500/20 hover:bg-sky-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-sky-300/40 bg-sky-500/20 hover:bg-sky-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-sky-200">Smart Memory</p>
+              <p className="text-sm text-sky-700">Smart Memory</p>
               <h2 className="text-xl font-bold mt-1">AI랑 기억력 대결</h2>
-              <p className="text-sm text-white/80 mt-2">5개 단어 순서대로 외워서 말하기</p>
+              <p className="text-sm text-slate-700 mt-2">순서 기억해 말하기</p>
             </button>
             <button
               type="button"
@@ -2481,11 +2481,11 @@ export default function GamePage() {
                 setMode("frog");
                 beginFrogRound();
               }}
-              className="rounded-2xl border border-lime-300/40 bg-lime-500/20 hover:bg-lime-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-lime-300/40 bg-lime-500/20 hover:bg-lime-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-lime-200">Frog Challenge</p>
+              <p className="text-sm text-lime-700">Frog Challenge</p>
               <h2 className="text-xl font-bold mt-1">AI 청개구리 대결</h2>
-              <p className="text-sm text-white/80 mt-2">AI 문장 반대로 말하기</p>
+              <p className="text-sm text-slate-700 mt-2">반대로 바꿔 말하기</p>
             </button>
             <button
               type="button"
@@ -2494,11 +2494,11 @@ export default function GamePage() {
                 setMode("treasure");
                 beginTreasureRound();
               }}
-              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-amber-300/40 bg-amber-500/20 hover:bg-amber-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-amber-200">Treasure Quest</p>
+              <p className="text-sm text-amber-700">Treasure Quest</p>
               <h2 className="text-xl font-bold mt-1">AI 보물찾기 게임</h2>
-              <p className="text-sm text-white/80 mt-2">보물 단어를 넣어 문장 만들기</p>
+              <p className="text-sm text-slate-700 mt-2">단어 넣어 문장 만들기</p>
             </button>
             <button
               type="button"
@@ -2506,11 +2506,11 @@ export default function GamePage() {
                 setMode("alphabet");
                 beginAlphaRound();
               }}
-              className="rounded-2xl border border-indigo-300/40 bg-indigo-500/20 hover:bg-indigo-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-indigo-300/40 bg-indigo-500/20 hover:bg-indigo-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-indigo-200">Letter Quiz</p>
+              <p className="text-sm text-indigo-700">Letter Quiz</p>
               <h2 className="text-xl font-bold mt-1">알파벳 주사위 퀴즈</h2>
-              <p className="text-sm text-white/80 mt-2">주사위로 알파벳 정하고 단어 릴레이</p>
+              <p className="text-sm text-slate-700 mt-2">알파벳으로 단어 말하기</p>
             </button>
             <button
               type="button"
@@ -2518,11 +2518,11 @@ export default function GamePage() {
                 setMode("tongue");
                 beginTongueRound();
               }}
-              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-fuchsia-300/40 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-fuchsia-200">Tongue Twister</p>
+              <p className="text-sm text-fuchsia-700">Tongue Twister</p>
               <h2 className="text-xl font-bold mt-1">AI 텅 트위스터 챌린지</h2>
-              <p className="text-sm text-white/80 mt-2">문장 듣고 똑같이 따라하기</p>
+              <p className="text-sm text-slate-700 mt-2">듣고 그대로 따라 말하기</p>
             </button>
             <button
               type="button"
@@ -2530,11 +2530,11 @@ export default function GamePage() {
                 setMode("rhythm");
                 beginRhythmRound();
               }}
-              className="rounded-2xl border border-pink-300/40 bg-pink-500/20 hover:bg-pink-500/30 p-5 text-left transition"
+              className="rounded-2xl border border-pink-300/40 bg-pink-500/20 hover:bg-pink-500/30 p-5 text-left text-slate-900 transition"
             >
-              <p className="text-sm text-pink-200">Rhythm &amp; Dance</p>
+              <p className="text-sm text-pink-700">Rhythm &amp; Dance</p>
               <h2 className="text-xl font-bold mt-1">AI 리듬 따라잡기</h2>
-              <p className="text-sm text-white/80 mt-2">2단계로 빠르게 문장 말하기</p>
+              <p className="text-sm text-slate-700 mt-2">듣고 빠르게 따라 말하기</p>
             </button>
           </section>
         )}
@@ -2565,7 +2565,7 @@ export default function GamePage() {
                   activeRoundRef.current = null;
                   stop();
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-cyan-100/80 hover:text-cyan-50"
               >
                 코너 선택으로
               </button>
@@ -2689,7 +2689,7 @@ export default function GamePage() {
         )}
 
         {mode === "duel" && (
-          <section className="relative overflow-hidden rounded-2xl border border-cyan-300/30 bg-black/35 p-5 space-y-4">
+          <section className="relative overflow-hidden rounded-2xl border border-cyan-300/45 bg-gradient-to-b from-cyan-950 via-slate-950 to-indigo-950 p-5 space-y-4 shadow-[0_18px_42px_rgba(6,182,212,0.24)]">
             {duelImpact !== "none" && (
               <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
                 <div
@@ -2708,7 +2708,7 @@ export default function GamePage() {
               </div>
             )}
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-cyan-200">AI vs. Me</h2>
+              <h2 className="text-lg font-extrabold text-cyan-300">AI vs. Me</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -2718,15 +2718,15 @@ export default function GamePage() {
                   activeRoundRef.current = null;
                   stop();
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-cyan-300 hover:text-sky-300"
               >
                 코너 선택으로
               </button>
             </div>
 
-            <div className="rounded-xl border border-cyan-200/30 bg-cyan-500/10 p-4">
-              <p className="text-xs text-cyan-100/80 mb-1">대결</p>
-              <p className="font-medium">{duelMission.taunt}</p>
+            <div className="rounded-xl border border-cyan-200/35 bg-cyan-900/55 p-4">
+              <p className="text-xs font-semibold text-white mb-1">대결</p>
+              <p className="font-bold text-white">{duelMission.taunt}</p>
             </div>
 
             {duelPhase === "idle" && (
@@ -2745,7 +2745,7 @@ export default function GamePage() {
                   {duelPhase === "countdown" ? duelCountdown : "GO!"}
                 </div>
                 {duelPhase === "live" && (
-                  <p className="text-sm text-white/80">
+                  <p className="text-sm text-cyan-300">
                     {duelMission.targetSentences}문장 이상 도전! 남은 시간: {duelTimeLeft}s
                   </p>
                 )}
@@ -2753,13 +2753,13 @@ export default function GamePage() {
             )}
 
             {duelPhase === "judging" && (
-              <div className="rounded-xl bg-white/10 p-4 text-center">
+              <div className="rounded-xl border border-cyan-200/25 bg-cyan-950/45 p-4 text-center">
                 <p className="text-lg font-semibold animate-pulse">대결 결과 계산 중...</p>
               </div>
             )}
 
-            <div className="rounded-xl border border-cyan-200/20 p-4 space-y-2">
-              <div className="flex justify-between text-sm text-white/80">
+            <div className="rounded-xl border border-cyan-200/25 bg-cyan-950/35 p-4 space-y-2">
+              <div className="flex justify-between text-sm font-semibold text-white">
                 <span>AI</span>
                 <span>ME</span>
               </div>
@@ -2795,18 +2795,18 @@ export default function GamePage() {
                 />
               </div>
               {duelPhase === "live" && (
-                <p className="text-[11px] text-cyan-100/75">
+                <p className="text-[11px] text-sky-300">
                   말하기를 시작하면 광선검이 내 쪽으로 밀려요!
                 </p>
               )}
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm font-semibold text-white">
                 <span>AI 문장: {duelAiSentences}</span>
                 <span>내 문장: {duelUserSentences}</span>
               </div>
             </div>
 
             {duelPhase === "result" && (
-              <div className="rounded-xl bg-white/10 p-4 space-y-2">
+              <div className="rounded-xl border border-cyan-200/25 bg-cyan-950/45 p-4 space-y-2">
                 <p
                   className={`text-lg font-bold ${
                     duelWinner === "user"
@@ -2818,7 +2818,7 @@ export default function GamePage() {
                 >
                   RESULT: {duelResultLabel}
                 </p>
-                <p className="text-sm text-white/85">{duelMessage}</p>
+                <p className="text-sm text-sky-300">{duelMessage}</p>
                 <button
                   type="button"
                   onClick={beginDuelRound}
@@ -2843,7 +2843,7 @@ export default function GamePage() {
                   setLiveTranscript(e.target.value);
                 }}
                 placeholder="음성이 잘 안 되면 여기에 영어로 입력해도 됩니다."
-                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-300/60"
+                className="flex-1 rounded-xl bg-cyan-500/10 border border-cyan-200/25 px-3 py-2 text-sm text-white placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-cyan-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" />
             </div>
@@ -2851,11 +2851,11 @@ export default function GamePage() {
         )}
 
         {mode === "twenty" && (
-          <section className="relative overflow-hidden rounded-3xl border border-emerald-300/40 bg-gradient-to-b from-emerald-900/55 via-slate-900/60 to-emerald-950/60 p-5 space-y-4">
+          <section className="relative overflow-hidden rounded-3xl border border-emerald-300/50 bg-gradient-to-b from-emerald-950 via-teal-950 to-slate-950 p-5 space-y-4 shadow-[0_18px_42px_rgba(16,185,129,0.24)]">
             <div className="absolute -top-10 -right-8 w-36 h-36 rounded-full bg-emerald-300/10 blur-2xl pointer-events-none" />
             <div className="absolute -bottom-10 -left-8 w-36 h-36 rounded-full bg-cyan-300/10 blur-2xl pointer-events-none" />
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-emerald-200">AI랑 스무고개</h2>
+              <h2 className="text-lg font-extrabold text-emerald-300">AI랑 스무고개</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -2863,7 +2863,7 @@ export default function GamePage() {
                   stopMemoryPlayback();
                   setMode("menu");
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-emerald-300 hover:text-teal-300"
               >
                 코너 선택으로
               </button>
@@ -2872,27 +2872,27 @@ export default function GamePage() {
             <div
               className={`rounded-2xl border p-4 transition-colors duration-300 ${
                 twentyHintMode === "keywords"
-                  ? "border-teal-300/70 bg-teal-100/35 backdrop-blur-[1px]"
+                  ? "border-teal-300/70 bg-emerald-500/10 backdrop-blur-[1px]"
                   : "border-indigo-300/75 bg-slate-900/72 backdrop-blur-[1px]"
               }`}
               style={{ animation: "quiz-glow 2.4s ease-in-out infinite" }}
             >
               <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs font-semibold ${twentyHintMode === "keywords" ? "text-emerald-700" : "text-indigo-100"}`}>
+                <p className={`text-xs font-semibold ${twentyHintMode === "keywords" ? "text-emerald-300" : "text-violet-300"}`}>
                   HINT MODE
                 </p>
-                <p className={`text-xs ${twentyHintMode === "keywords" ? "text-emerald-700/80" : "text-indigo-100/80"}`}>
+                <p className={`text-xs ${twentyHintMode === "keywords" ? "text-emerald-300/85" : "text-violet-300/85"}`}>
                   시도 {twentyAttempts}회
                 </p>
               </div>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {twentyHintMode === "keywords" ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-teal-500/70 bg-teal-100/75 text-teal-900">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-emerald-300/60 bg-emerald-400/15 text-emerald-300">
                     <span style={{ animation: "quiz-float 2.6s ease-in-out infinite" }}>💡</span>
                     단어 힌트
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-indigo-300/80 bg-indigo-900/70 text-indigo-50">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full border border-violet-300/80 bg-indigo-900/70 text-violet-300">
                     <span style={{ animation: "quiz-float 2.2s ease-in-out infinite" }}>🧠</span>
                     문장 힌트
                   </span>
@@ -2919,7 +2919,7 @@ export default function GamePage() {
                   ))}
                 </div>
               ) : (
-                <ul className="mt-2 text-sm text-white/90 space-y-1.5">
+                <ul className="mt-2 text-sm text-violet-300 space-y-1.5">
                   {twentyQuestion.sentenceHints.map((hint, idx) => (
                     <button
                       type="button"
@@ -2928,7 +2928,7 @@ export default function GamePage() {
                         playClick();
                         speakHint(hint);
                       }}
-                      className="w-full text-left rounded-lg bg-indigo-950/85 border border-indigo-300/45 px-2.5 py-1.5 text-indigo-50 hover:bg-indigo-900 transition"
+                      className="w-full text-left rounded-lg bg-indigo-950/85 border border-violet-300/45 px-2.5 py-1.5 text-violet-300 hover:bg-indigo-900 transition"
                     >
                       {hint}
                     </button>
@@ -2937,21 +2937,23 @@ export default function GamePage() {
               )}
             </div>
 
-            <div className="rounded-xl border border-white/15 bg-white/5 p-3">
-              <p className="text-sm text-white/90">{twentyMessage}</p>
-              {twentyRecentGuesses.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {twentyRecentGuesses.map((g, idx) => (
-                    <span
-                      key={`${g}-${idx}`}
-                      className="px-2 py-0.5 rounded-full text-[11px] bg-slate-700/60 border border-slate-500/40 text-white/85"
-                    >
-                      {g}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            {twentyMessage || twentyRecentGuesses.length > 0 ? (
+              <div className="rounded-xl border border-emerald-200/25 bg-emerald-950/40 p-3">
+                {twentyMessage ? <p className="text-sm text-emerald-300">{twentyMessage}</p> : null}
+                {twentyRecentGuesses.length > 0 ? (
+                  <div className={twentyMessage ? "mt-2 flex flex-wrap gap-1.5" : "flex flex-wrap gap-1.5"}>
+                    {twentyRecentGuesses.map((g, idx) => (
+                      <span
+                        key={`${g}-${idx}`}
+                        className="px-2 py-0.5 rounded-full text-[11px] bg-slate-700/60 border border-emerald-400/30 text-emerald-300"
+                      >
+                        {g}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {twentySolved && (
               <div className="relative overflow-hidden rounded-xl border border-emerald-300/40 bg-emerald-400/20 p-4 text-center">
@@ -2969,8 +2971,8 @@ export default function GamePage() {
                     />
                   ))}
                 </div>
-                <p className="text-xl font-bold text-emerald-100">PASS!</p>
-                <p className="text-sm text-emerald-50 mt-1">정답: {twentyQuestion.answer}</p>
+                <p className="text-xl font-bold text-emerald-300">PASS!</p>
+                <p className="text-sm text-teal-300 mt-1">정답: {twentyQuestion.answer}</p>
               </div>
             )}
 
@@ -2980,7 +2982,7 @@ export default function GamePage() {
                 onChange={(e) => setTwentyGuess(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && submitTwentyGuess()}
                 placeholder="정답을 영어 단어로 입력하세요."
-                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300/60"
+                className="flex-1 rounded-xl bg-emerald-500/10 border border-emerald-200/25 px-3 py-2 text-sm text-white placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-emerald-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
@@ -2996,7 +2998,7 @@ export default function GamePage() {
             <button
               type="button"
               onClick={beginTwentyRound}
-              className="w-full py-2.5 rounded-xl border border-emerald-300/30 text-emerald-100 hover:bg-emerald-500/20 transition"
+              className="w-full py-2.5 rounded-xl border border-emerald-300/40 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 transition"
             >
               새 문제
             </button>
@@ -3005,12 +3007,12 @@ export default function GamePage() {
 
         {mode === "password" && (
           <section
-            className={`relative overflow-hidden rounded-3xl border border-violet-200/60 bg-gradient-to-b from-violet-700/40 via-indigo-700/35 to-cyan-700/30 p-5 space-y-4 ${
+            className={`relative overflow-hidden rounded-3xl border border-violet-200/65 bg-gradient-to-b from-violet-950 via-indigo-950 to-slate-950 p-5 space-y-4 shadow-[0_18px_42px_rgba(139,92,246,0.24)] ${
               passwordShake ? "animate-[shake_0.5s_linear]" : ""
             }`}
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-violet-100">AI랑 자물쇠 풀기</h2>
+              <h2 className="text-lg font-extrabold text-violet-300">AI랑 자물쇠 풀기</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -3018,13 +3020,13 @@ export default function GamePage() {
                   setMode("menu");
                   stop();
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-violet-300 hover:text-fuchsia-300"
               >
                 코너 선택으로
               </button>
             </div>
 
-            <div className="relative rounded-2xl border border-violet-200/55 bg-white/15 backdrop-blur-sm p-4">
+            <div className="relative rounded-2xl border border-violet-200/55 bg-violet-900/45 backdrop-blur-sm p-4">
               {passwordUnlocked && (
                 <div className="absolute inset-0 pointer-events-none">
                   <div className="absolute inset-0 bg-gradient-to-r from-yellow-200/15 via-white/10 to-cyan-200/15 animate-pulse" />
@@ -3072,10 +3074,10 @@ export default function GamePage() {
                     {passwordUnlocked ? "🔓" : "🔒"}
                   </span>
                 </div>
-                <div className="text-sm text-violet-50">
-                  <p className="font-semibold">Digital Lock</p>
-                  <p className="text-xs mt-1">정답 순서로 말하면 잠금 해제!</p>
-                  <p className="text-xs mt-1">진행: {passwordMatchedCount}/{passwordPuzzle.answerWords.length}</p>
+                <div className="text-sm">
+                  <p className="font-semibold text-fuchsia-300">Digital Lock</p>
+                  <p className="text-xs mt-1 font-bold text-white">정답 순서로 말하면 잠금 해제!</p>
+                  <p className="text-xs mt-1 font-bold text-white">진행: {passwordMatchedCount}/{passwordPuzzle.answerWords.length}</p>
                 </div>
               </div>
             </div>
@@ -3126,7 +3128,7 @@ export default function GamePage() {
                 }}
                 onKeyDown={(e) => e.key === "Enter" && submitPasswordTry()}
                 placeholder="음성 인식이 약하면 문장을 직접 입력해도 됩니다."
-                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-300/60"
+                className="flex-1 rounded-xl bg-violet-500/10 border border-violet-200/25 px-3 py-2 text-sm text-white placeholder:text-slate-300 outline-none focus:ring-2 focus:ring-violet-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
@@ -3141,7 +3143,7 @@ export default function GamePage() {
             <button
               type="button"
               onClick={beginPasswordRound}
-              className="w-full py-2.5 rounded-xl border border-violet-300/30 text-violet-100 hover:bg-violet-500/20 transition"
+              className="w-full py-2.5 rounded-xl border border-violet-300/40 bg-violet-500/20 text-violet-300 hover:bg-violet-500/30 transition"
             >
               새 비밀번호
             </button>
@@ -3188,7 +3190,7 @@ export default function GamePage() {
                   playClick();
                   setMode("menu");
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-fuchsia-100/80 hover:text-fuchsia-50"
               >
                 코너 선택으로
               </button>
@@ -3309,7 +3311,7 @@ export default function GamePage() {
                   playClick();
                   setMode("menu");
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-fuchsia-100/80 hover:text-fuchsia-50"
               >
                 코너 선택으로
               </button>
@@ -3511,7 +3513,7 @@ export default function GamePage() {
         )}
 
         {mode === "wordchain" && (
-          <section className="relative overflow-hidden rounded-3xl border border-fuchsia-300/40 bg-gradient-to-b from-fuchsia-900/55 via-indigo-950/60 to-slate-950/70 p-5 space-y-4">
+          <section className="relative overflow-hidden rounded-3xl border border-fuchsia-300/45 bg-gradient-to-b from-fuchsia-950 via-violet-900/92 to-cyan-800/85 p-5 space-y-4 shadow-[0_16px_36px_rgba(217,70,239,0.16)]">
             {wordChainCelebrate && (
               <div className="absolute inset-0 pointer-events-none z-20">
                 {Array.from({ length: 28 }).map((_, i) => (
@@ -3533,14 +3535,14 @@ export default function GamePage() {
             <div className="absolute -bottom-12 -left-10 w-40 h-40 rounded-full bg-cyan-300/10 blur-2xl pointer-events-none" />
 
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-extrabold text-fuchsia-100">AI랑 끝말잇기</h2>
+              <h2 className="text-lg font-extrabold text-fuchsia-300">AI랑 끝말잇기</h2>
               <button
                 type="button"
                 onClick={() => {
                   playClick();
                   setMode("menu");
                 }}
-                className="text-sm text-white/70 hover:text-white"
+                className="text-sm text-fuchsia-300 hover:text-cyan-300"
               >
                 코너 선택으로
               </button>
@@ -3561,37 +3563,37 @@ export default function GamePage() {
                     className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-fuchsia-500 via-cyan-300 to-emerald-300 transition-all duration-300"
                     style={{ height: `${wordChainGauge}%` }}
                   />
-                  <div className="absolute -right-10 top-1 text-[10px] text-fuchsia-100/80">MAX</div>
-                  <div className="absolute -right-10 bottom-1 text-[10px] text-fuchsia-100/80">MIN</div>
+                  <div className="absolute -right-10 top-1 text-[10px] text-fuchsia-300">MAX</div>
+                  <div className="absolute -right-10 bottom-1 text-[10px] text-fuchsia-300">MIN</div>
                 </div>
               </div>
 
               <div className="space-y-3">
-                <div className="rounded-2xl border border-fuchsia-200/40 bg-fuchsia-500/15 p-4">
-                  <div className="flex items-center justify-between text-xs text-fuchsia-100/80">
+                <div className="rounded-2xl border border-fuchsia-200/40 bg-fuchsia-900/55 p-4">
+                  <div className="flex items-center justify-between text-xs text-fuchsia-300">
                     <span>TURN {wordChainTurn}/{WORD_CHAIN_MAX_TURN}</span>
                     <span>게이지 {wordChainGauge}%</span>
                   </div>
-                  <p className="mt-2 text-sm text-white/90">{wordChainMessage}</p>
+                  <p className="mt-2 text-sm text-fuchsia-200">{wordChainMessage}</p>
                 </div>
 
-                <div className="rounded-2xl border border-cyan-200/35 bg-cyan-500/10 p-4">
-                  <p className="text-xs text-cyan-100/80">현재 기준 단어</p>
-                  <p className="text-2xl font-black text-cyan-100 tracking-wide">{wordChainCurrent.toUpperCase()}</p>
-                  <p className="text-sm text-cyan-50/90 mt-1">다음 단어 시작 글자: <span className="font-bold text-emerald-300">{wordChainRequired}</span></p>
+                <div className="rounded-2xl border border-cyan-200/35 bg-cyan-900/55 p-4">
+                  <p className="text-xs text-cyan-300">현재 기준 단어</p>
+                  <p className="text-2xl font-black text-cyan-300 tracking-wide">{wordChainCurrent.toUpperCase()}</p>
+                  <p className="text-sm text-cyan-200 mt-1">다음 단어 시작 글자: <span className="font-bold text-emerald-300">{wordChainRequired}</span></p>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/15 bg-white/5 p-3">
+            <div className="rounded-2xl border border-fuchsia-200/25 bg-fuchsia-950/35 p-3">
               <div className="flex flex-wrap gap-2">
                 {wordChainHistory.slice(-10).map((entry, idx) => (
                   <span
                     key={`chain-${entry.turn}-${idx}-${entry.word}`}
                     className={`px-2.5 py-1 rounded-full text-xs border ${
                       entry.speaker === "me"
-                        ? "bg-emerald-400/20 border-emerald-200/50 text-emerald-100"
-                        : "bg-fuchsia-400/20 border-fuchsia-200/50 text-fuchsia-100"
+                        ? "bg-emerald-400/20 border-emerald-200/50 text-emerald-300"
+                        : "bg-fuchsia-400/20 border-fuchsia-200/50 text-fuchsia-300"
                     }`}
                   >
                     {entry.speaker === "me" ? "ME" : "AI"} · {entry.word}
@@ -3615,7 +3617,7 @@ export default function GamePage() {
                 }}
                 onKeyDown={(e) => e.key === "Enter" && submitWordChainTurn()}
                 placeholder="끝 글자로 시작하는 영어 단어를 말하거나 입력하세요."
-                className="flex-1 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-fuchsia-300/60"
+                className="flex-1 rounded-xl bg-fuchsia-500/10 border border-fuchsia-200/25 px-3 py-2 text-sm text-fuchsia-200 placeholder:text-fuchsia-300/55 outline-none focus:ring-2 focus:ring-fuchsia-300/60"
               />
               <VoiceInputButton isListening={isListening} onToggle={toggle} supported={supported} theme="sky" variant="startStop" />
               <button
