@@ -1,15 +1,88 @@
 "use client";
 
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, type ReactNode, type RefObject, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import HomeButton from "@/components/HomeButton";
 import { playClick } from "@/lib/sounds";
 
 type WeekNumber = 1 | 2 | 3 | 4;
-type CoopMode = "menu" | "pet" | "island" | "cooking";
+type CoopMode = "menu" | "pet" | "island" | "cooking" | "drawing";
 type MobileInfoSection = "ranking" | "selected" | "logs" | "my";
 type MissionDifficulty = "easy" | "medium" | "hard";
 type PetMobileSheet = "actions" | "info" | null;
+type DrawingMobileSheet = "tools" | "info" | null;
+type DrawingTool = "pen" | "line" | "rect" | "circle" | "eraser" | "sticker" | "move" | "bucket";
+type DrawingTheme = "blue" | "sunset" | "tropical";
+type DrawingSubject = "playground" | "festival" | "sea";
+
+interface DrawingPoint {
+  x: number;
+  y: number;
+}
+
+interface DrawingWeekConfig {
+  week: WeekNumber;
+  title: string;
+  phaseLabel: string;
+  mission: string;
+  threshold: number;
+  successSummary: string;
+  successDetail: string;
+  failSummary: string;
+  failDetail: string;
+}
+
+type DrawingStrokeStyle = "solid" | "texture";
+
+interface DrawingStrokeElement {
+  id: string;
+  kind: "stroke";
+  tool: "pen";
+  points: DrawingPoint[];
+  color: string;
+  size: number;
+  strokeStyle?: DrawingStrokeStyle;
+  userId: string;
+  userName: string;
+  week: WeekNumber;
+}
+
+interface DrawingShapeElement {
+  id: string;
+  kind: "shape";
+  tool: "line" | "rect" | "circle";
+  start: DrawingPoint;
+  end: DrawingPoint;
+  color: string;
+  size: number;
+  userId: string;
+  userName: string;
+  week: WeekNumber;
+}
+
+interface DrawingStickerElement {
+  id: string;
+  kind: "sticker";
+  sticker: string;
+  point: DrawingPoint;
+  size: number;
+  userId: string;
+  userName: string;
+  week: WeekNumber;
+}
+
+interface DrawingBucketFillElement {
+  id: string;
+  kind: "bucketFill";
+  href: string;
+  /** 페인트가 칠해진 픽셀만 1 — 지우개 히트 테스트용 */
+  hitMask: Uint8Array;
+  userId: string;
+  userName: string;
+  week: WeekNumber;
+}
+
+type DrawingElement = DrawingStrokeElement | DrawingShapeElement | DrawingStickerElement | DrawingBucketFillElement;
 
 interface CoopPlayer {
   id: string;
@@ -829,6 +902,539 @@ const COOKING_SURPRISE_OPTIONS: Record<WeekNumber, ActionOption[]> = {
   ],
 };
 
+const DRAWING_WEEK_CONFIGS: Record<WeekNumber, DrawingWeekConfig> = {
+  1: {
+    week: 1,
+    title: "1주차",
+    phaseLabel: "기획",
+    mission: "빈 캔버스에서 시작해 배경 투표를 모으고, 리더가 전체 주제를 정해 주세요.",
+    threshold: 30,
+    successSummary: "1주차 성공: 배경 기획과 주제가 정리됐어요.",
+    successDetail: "배경 투표가 모이고 리더가 이번 공동 그림의 큰 방향을 확정했어요.",
+    failSummary: "1주차 미달: 아직 기획이 덜 모였어요.",
+    failDetail: "배경 투표와 주제 선택을 더 진행하면 다음 단계로 넘어갈 수 있어요.",
+  },
+  2: {
+    week: 2,
+    title: "2주차",
+    phaseLabel: "스케치",
+    mission: "리더가 정한 주제를 바탕으로 큰 형태와 구도를 스케치해 보세요.",
+    threshold: 36,
+    successSummary: "2주차 성공: 스케치 구도가 안정적으로 잡혔어요.",
+    successDetail: "메인 오브젝트와 배치가 정리되어 다음 주 채색이 쉬워졌어요.",
+    failSummary: "2주차 미달: 스케치가 아직 부족해요.",
+    failDetail: "큰 형태와 주요 선을 조금 더 추가하면 구도가 또렷해져요.",
+  },
+  3: {
+    week: 3,
+    title: "3주차",
+    phaseLabel: "채색",
+    mission: "스케치 위에 하늘, 바다, 오브젝트 색을 입혀 그림 분위기를 살려 보세요.",
+    threshold: 40,
+    successSummary: "3주차 성공: 채색이 들어가 그림이 확 살아났어요.",
+    successDetail: "큰 면의 색이 정리되어 작품 전체가 훨씬 풍성해졌어요.",
+    failSummary: "3주차 미달: 채색이 더 필요해요.",
+    failDetail: "비어 있는 면을 더 채우면 완성도가 크게 올라가요.",
+  },
+  4: {
+    week: 4,
+    title: "4주차",
+    phaseLabel: "스티커 장식",
+    mission: "마지막으로 스티커와 마감 장식을 더해 하나의 공동 그림을 완성해 보세요.",
+    threshold: 32,
+    successSummary: "4주차 성공: 하나의 공동 그림이 완성됐어요.",
+    successDetail: "배경, 스케치, 채색, 장식이 모두 쌓여 팀 작품이 완성됐어요.",
+    failSummary: "4주차 미달: 마무리 장식이 조금 부족해요.",
+    failDetail: "스티커와 포인트 장식을 더하면 완성감이 커져요.",
+  },
+};
+
+const DRAWING_THEME_OPTIONS: Array<{ id: DrawingTheme; label: string; badge: string; className: string }> = [
+  { id: "blue", label: "맑은 파도", badge: "🌊", className: "from-sky-100 via-cyan-50 to-amber-50" },
+  { id: "sunset", label: "노을 해변", badge: "🌅", className: "from-orange-100 via-rose-50 to-amber-50" },
+  { id: "tropical", label: "야자수 해변", badge: "🌴", className: "from-emerald-100 via-cyan-50 to-yellow-50" },
+];
+
+const DRAWING_COLORS = ["#0f172a", "#2563eb", "#14b8a6", "#f97316", "#ef4444", "#d946ef", "#facc15", "#ffffff"];
+const DRAWING_STICKERS = ["⭐", "☀️", "☁️", "🌈", "🌴", "🐚", "🐠", "🦀"];
+const DRAWING_SURPRISE_OPTIONS: Record<WeekNumber, ActionOption[]> = {
+  1: [
+    { id: "dr-card-1", label: "배경 번짐 카드", delta: 8, detail: "이번 주 배경 면적을 더 넓게 채울 수 있어요." },
+    { id: "dr-card-2", label: "컬러 참고 카드", delta: 7, detail: "배경 톤을 더 안정적으로 고를 수 있어요." },
+    { id: "dr-card-3", label: "구도 메모 카드", delta: 6, detail: "리더가 전체 구도를 잡기 쉬워졌어요." },
+  ],
+  2: [
+    { id: "dr-card-4", label: "스케치 연필 카드", delta: 8, detail: "텍스처 연필 선 종류를 팔레트에 추가해요." },
+    { id: "dr-card-5", label: "요소 이동 카드", delta: 7, detail: "이동 도구로 길게 눌러 그린 요소를 옮길 수 있어요." },
+    { id: "dr-card-6", label: "구도 프레임 카드", delta: 6, detail: "구도 가이드선을 켜거나 끄고, 패널에서 해제할 수 있어요." },
+  ],
+  3: [
+    { id: "dr-card-7", label: "채색 부스트 카드", delta: 8, detail: "페인트통 도구로 닫힌 선 안만 채울 수 있어요." },
+    { id: "dr-card-8", label: "팔레트 카드", delta: 7, detail: "색 조합 선택이 더 쉬워졌어요." },
+    { id: "dr-card-9", label: "그라데이션 카드", delta: 6, detail: "배경과 오브젝트 색을 더 풍성하게 채울 수 있어요." },
+  ],
+  4: [
+    { id: "dr-card-10", label: "피날레 스티커 카드", delta: 8, detail: "스티커 팔레트에 새 이모지 옵션이 추가돼요." },
+    { id: "dr-card-11", label: "반짝 마감 카드", delta: 7, detail: "누를 때마다 사진 액자 색이 바뀌어요." },
+    { id: "dr-card-12", label: "팀 데코 카드", delta: 6, detail: "모든 팀원의 스티커 사용 횟수가 늘어나요." },
+  ],
+};
+
+/** 반짝 마감 카드(dr-card-11): 누를 때마다 순환하는 액자 테두리 색 */
+const SPARKLE_FINISH_FRAME_THEMES: ReadonlyArray<{ label: string; border: string; insetLine: string; outerGlow: string }> = [
+  { label: "화이트", border: "rgba(255,255,255,0.96)", insetLine: "rgba(148,163,184,0.5)", outerGlow: "rgba(15,23,42,0.2)" },
+  { label: "골드", border: "rgba(253,224,71,0.95)", insetLine: "rgba(217,119,6,0.4)", outerGlow: "rgba(180,83,9,0.18)" },
+  { label: "로즈", border: "rgba(251,207,232,0.96)", insetLine: "rgba(219,39,119,0.32)", outerGlow: "rgba(190,24,93,0.16)" },
+  { label: "시안", border: "rgba(207,250,254,0.96)", insetLine: "rgba(8,145,178,0.35)", outerGlow: "rgba(14,116,144,0.16)" },
+  { label: "라일락", border: "rgba(237,233,254,0.97)", insetLine: "rgba(124,58,237,0.3)", outerGlow: "rgba(91,33,182,0.14)" },
+  { label: "민트", border: "rgba(209,250,229,0.96)", insetLine: "rgba(5,150,105,0.32)", outerGlow: "rgba(4,120,87,0.14)" },
+];
+
+const DRAWING_THEME_VOTE_OPTIONS: Record<WeekNumber, DrawingTheme[]> = {
+  1: ["blue", "sunset", "tropical"],
+  2: ["blue", "sunset", "tropical"],
+  3: ["blue", "sunset", "tropical"],
+  4: ["blue", "sunset", "tropical"],
+};
+const DRAWING_SUBJECT_OPTIONS: Array<{
+  id: DrawingSubject;
+  label: string;
+  badge: string;
+  description: string;
+}> = [
+  { id: "playground", label: "파도 놀이터", badge: "🏖️", description: "튜브와 모래성, 아이템이 많은 해변" },
+  { id: "festival", label: "노을 축제", badge: "🎆", description: "노을과 조명, 음악이 있는 여름 축제" },
+  { id: "sea", label: "바다 탐험", badge: "🐠", description: "바닷속 친구들과 배가 함께 있는 장면" },
+];
+const DRAWING_LEADER_MESSAGES = [
+  "원하는 배경에 투표해 주세요!",
+  "배경 톤부터 같이 맞춰 보자!",
+  "스케치는 큰 형태부터 가 보자!",
+  "채색은 비슷한 색끼리 묶어 보자!",
+  "마지막엔 스티커를 겹치지 않게 붙여 보자!",
+  "빈 부분은 자유롭게 채워 보자!",
+];
+
+const DRAWING_INITIAL_LOGS: SharedLog[] = [
+  {
+    id: "drawing-boot-1",
+    week: 0,
+    userId: "p1",
+    userName: "민서",
+    tone: "cyan",
+    summary: "이번 시즌은 빈 캔버스에서 공동 그림을 완성하는 프로젝트예요.",
+    detail: "1주차에는 배경 투표와 주제 결정부터 시작합니다.",
+  },
+  {
+    id: "drawing-boot-2",
+    week: 1,
+    userId: "p3",
+    userName: "윤지",
+    tone: "amber",
+    summary: "캔버스가 비어 있어 모두의 첫 선택을 기다리고 있어요.",
+    detail: "배경 투표를 모아 리더가 첫 주제를 정하게 됩니다.",
+  },
+];
+
+const DRAWING_MISSION_PROMPTS: Record<WeekNumber, Record<MissionDifficulty, MissionPrompt[]>> = {
+  1: {
+    easy: [{ text: "blue sky", baseScore: 12 }, { text: "beach theme", baseScore: 12 }, { text: "summer art", baseScore: 12 }],
+    medium: [
+      { text: "We choose the background first.", baseScore: 18 },
+      { text: "Our team starts with a blank canvas.", baseScore: 18 },
+      { text: "The leader picks the art theme.", baseScore: 18 },
+    ],
+    hard: [
+      { text: "Our team votes for the best beach background.", baseScore: 26 },
+      { text: "The leader chooses a summer scene for the canvas.", baseScore: 26 },
+      { text: "We plan the first week before drawing together.", baseScore: 26 },
+    ],
+  },
+  2: {
+    easy: [{ text: "draw sketch", baseScore: 13 }, { text: "big outline", baseScore: 13 }, { text: "soft pencil", baseScore: 13 }],
+    medium: [
+      { text: "We sketch the main objects.", baseScore: 19 },
+      { text: "The team draws the outline first.", baseScore: 19 },
+      { text: "Our sketch shows the whole scene.", baseScore: 19 },
+    ],
+    hard: [
+      { text: "We draw a clear sketch for the whole summer scene.", baseScore: 27 },
+      { text: "The team makes a strong outline before coloring.", baseScore: 27 },
+      { text: "Our sketch helps everyone add the next details.", baseScore: 27 },
+    ],
+  },
+  3: {
+    easy: [{ text: "paint now", baseScore: 14 }, { text: "bright color", baseScore: 14 }, { text: "fill the sea", baseScore: 14 }],
+    medium: [
+      { text: "We color the sky and sea.", baseScore: 20 },
+      { text: "The team paints the big areas.", baseScore: 20 },
+      { text: "Our canvas looks bright now.", baseScore: 20 },
+    ],
+    hard: [
+      { text: "We add bright colors to the whole summer canvas.", baseScore: 28 },
+      { text: "The team fills the scene with warm and cool colors.", baseScore: 28 },
+      { text: "Our painting looks more alive after the coloring stage.", baseScore: 28 },
+    ],
+  },
+  4: {
+    easy: [{ text: "cute sticker", baseScore: 15 }, { text: "final touch", baseScore: 15 }, { text: "finish art", baseScore: 15 }],
+    medium: [
+      { text: "We decorate the final artwork.", baseScore: 21 },
+      { text: "The team adds cute stickers now.", baseScore: 21 },
+      { text: "Our canvas is ready to finish.", baseScore: 21 },
+    ],
+    hard: [
+      { text: "We finish the team artwork with bright final stickers.", baseScore: 30 },
+      { text: "Our group decorates the canvas for the last stage.", baseScore: 30 },
+      { text: "The final artwork shines after the last decoration.", baseScore: 30 },
+    ],
+  },
+};
+
+function getDrawingTokensForWeek(_week: WeekNumber): Record<string, number> {
+  return { p1: 8, p2: 7, p3: 6, p4: 5, p5: 5 };
+}
+
+function getDrawingPointFromEvent(
+  event: ReactPointerEvent<SVGSVGElement>,
+  svgRef: RefObject<SVGSVGElement | null>
+): DrawingPoint {
+  const svg = svgRef.current;
+  if (!svg) return { x: 0, y: 0 };
+  const rect = svg.getBoundingClientRect();
+  return {
+    x: ((event.clientX - rect.left) / rect.width) * 1000,
+    y: ((event.clientY - rect.top) / rect.height) * 700,
+  };
+}
+
+function getDrawingPath(points: DrawingPoint[]): string {
+  if (points.length === 0) return "";
+  return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+}
+
+function getDrawingDistance(a: DrawingPoint, b: DrawingPoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function getTopmostElementAtPoint(elements: DrawingElement[], point: DrawingPoint): DrawingElement | null {
+  for (let i = elements.length - 1; i >= 0; i -= 1) {
+    if (isDrawingElementHit(elements[i], point)) return elements[i];
+  }
+  return null;
+}
+
+function translateDrawingElement(element: DrawingElement, dx: number, dy: number): DrawingElement {
+  if (element.kind === "bucketFill") {
+    return element;
+  }
+  if (element.kind === "sticker") {
+    return { ...element, point: { x: element.point.x + dx, y: element.point.y + dy } };
+  }
+  if (element.kind === "stroke") {
+    return { ...element, points: element.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+  }
+  return {
+    ...element,
+    start: { x: element.start.x + dx, y: element.start.y + dy },
+    end: { x: element.end.x + dx, y: element.end.y + dy },
+  };
+}
+
+const PAINT_BUCKET_W = 1000;
+const PAINT_BUCKET_H = 700;
+
+/** 4주차 스티커: 두께(4·8·12·18) → 요소 size (render 시 fontSize = size×3, 작음→큼) */
+function getStickerSizeFromThickness(thickness: number): number {
+  const map: Record<number, number> = { 4: 9, 8: 12, 12: 16, 18: 22 };
+  return map[thickness] ?? Math.max(8, Math.round((thickness / 18) * 22));
+}
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+}
+
+function drawPaintBoundariesOnCanvas(ctx: CanvasRenderingContext2D, elements: DrawingElement[]) {
+  ctx.save();
+  ctx.strokeStyle = "#000000";
+  ctx.fillStyle = "#000000";
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const el of elements) {
+    if (el.kind === "sticker" || el.kind === "bucketFill") continue;
+    if (el.kind === "stroke") {
+      const pts = el.points;
+      if (pts.length < 2) continue;
+      ctx.lineWidth = Math.max(1, el.size);
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+      continue;
+    }
+    if (el.kind === "shape") {
+      ctx.lineWidth = Math.max(1, el.size);
+      if (el.tool === "line") {
+        ctx.beginPath();
+        ctx.moveTo(el.start.x, el.start.y);
+        ctx.lineTo(el.end.x, el.end.y);
+        ctx.stroke();
+      } else if (el.tool === "rect") {
+        const x = Math.min(el.start.x, el.end.x);
+        const y = Math.min(el.start.y, el.end.y);
+        const rw = Math.abs(el.end.x - el.start.x);
+        const rh = Math.abs(el.end.y - el.start.y);
+        ctx.beginPath();
+        if (typeof ctx.roundRect === "function") {
+          ctx.roundRect(x, y, rw, rh, 16);
+        } else {
+          ctx.rect(x, y, rw, rh);
+        }
+        ctx.stroke();
+      } else {
+        const cx = (el.start.x + el.end.x) / 2;
+        const cy = (el.start.y + el.end.y) / 2;
+        const rx = Math.abs(el.end.x - el.start.x) / 2;
+        const ry = Math.abs(el.end.y - el.start.y) / 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function floodFillPaintRegion(data: ImageData, seedX: number, seedY: number, fr: number, fg: number, fb: number): boolean {
+  const w = data.width;
+  const h = data.height;
+  const d = data.data;
+  const idx = (x: number, y: number) => (y * w + x) * 4;
+  if (seedX < 0 || seedX >= w || seedY < 0 || seedY >= h) return false;
+  const si = idx(seedX, seedY);
+  const tr = d[si];
+  const tg = d[si + 1];
+  const tb = d[si + 2];
+  const ta = d[si + 3];
+  const seedSum = tr + tg + tb;
+  const matchesSeed = (i: number) => d[i] === tr && d[i + 1] === tg && d[i + 2] === tb && d[i + 3] === ta;
+  if (seedSum < 280 || ta < 200) return false;
+  if (seedSum < 720) return false;
+
+  const q: [number, number][] = [[seedX, seedY]];
+  let qi = 0;
+  let filled = 0;
+  const maxOps = w * h;
+
+  while (qi < q.length && filled < maxOps) {
+    const [x, y] = q[qi]!;
+    qi += 1;
+    const i = idx(x, y);
+    if (!matchesSeed(i)) continue;
+    d[i] = fr;
+    d[i + 1] = fg;
+    d[i + 2] = fb;
+    d[i + 3] = 255;
+    filled += 1;
+    const next: [number, number][] = [
+      [x + 1, y],
+      [x - 1, y],
+      [x, y + 1],
+      [x, y - 1],
+    ];
+    for (const [nx, ny] of next) {
+      if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+      const ni = idx(nx, ny);
+      if (matchesSeed(ni)) q.push([nx, ny]);
+    }
+  }
+  return filled > 0;
+}
+
+function buildPaintBucketDataUrl(
+  elements: DrawingElement[],
+  point: DrawingPoint,
+  fillHex: string
+): { href: string; hitMask: Uint8Array } | null {
+  if (typeof document === "undefined") return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = PAINT_BUCKET_W;
+  canvas.height = PAINT_BUCKET_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, PAINT_BUCKET_W, PAINT_BUCKET_H);
+  drawPaintBoundariesOnCanvas(ctx, elements);
+  const imageData = ctx.getImageData(0, 0, PAINT_BUCKET_W, PAINT_BUCKET_H);
+  const { r: fr, g: fg, b: fb } = hexToRgb(fillHex);
+  const sx = Math.floor(point.x);
+  const sy = Math.floor(point.y);
+  const ok = floodFillPaintRegion(imageData, sx, sy, fr, fg, fb);
+  if (!ok) return null;
+
+  const out = ctx.createImageData(PAINT_BUCKET_W, PAINT_BUCKET_H);
+  const s = imageData.data;
+  const o = out.data;
+  const alphaByte = 220;
+  for (let i = 0; i < s.length; i += 4) {
+    if (s[i] === fr && s[i + 1] === fg && s[i + 2] === fb && s[i + 3] === 255) {
+      o[i] = fr;
+      o[i + 1] = fg;
+      o[i + 2] = fb;
+      o[i + 3] = alphaByte;
+    } else {
+      o[i] = 0;
+      o[i + 1] = 0;
+      o[i + 2] = 0;
+      o[i + 3] = 0;
+    }
+  }
+  const hitMask = new Uint8Array(PAINT_BUCKET_W * PAINT_BUCKET_H);
+  for (let y = 0; y < PAINT_BUCKET_H; y += 1) {
+    for (let x = 0; x < PAINT_BUCKET_W; x += 1) {
+      const i = (y * PAINT_BUCKET_W + x) * 4;
+      if (o[i + 3] > 10) hitMask[y * PAINT_BUCKET_W + x] = 1;
+    }
+  }
+  const outCanvas = document.createElement("canvas");
+  outCanvas.width = PAINT_BUCKET_W;
+  outCanvas.height = PAINT_BUCKET_H;
+  const octx = outCanvas.getContext("2d");
+  if (!octx) return null;
+  octx.putImageData(out, 0, 0);
+  return { href: outCanvas.toDataURL("image/png"), hitMask };
+}
+
+function isDrawingElementHit(element: DrawingElement, point: DrawingPoint): boolean {
+  if (element.kind === "bucketFill") {
+    const xi = Math.floor(point.x);
+    const yi = Math.floor(point.y);
+    if (xi < 0 || xi >= PAINT_BUCKET_W || yi < 0 || yi >= PAINT_BUCKET_H) return false;
+    return element.hitMask[yi * PAINT_BUCKET_W + xi] === 1;
+  }
+  if (element.kind === "sticker") {
+    const fontSize = element.size * 3;
+    const hitRadius = (fontSize / 2) * 1.15;
+    return getDrawingDistance(element.point, point) <= hitRadius;
+  }
+
+  if (element.kind === "stroke") {
+    return element.points.some((strokePoint) => getDrawingDistance(strokePoint, point) <= element.size + 8);
+  }
+
+  const minX = Math.min(element.start.x, element.end.x) - (element.size + 12);
+  const maxX = Math.max(element.start.x, element.end.x) + (element.size + 12);
+  const minY = Math.min(element.start.y, element.end.y) - (element.size + 12);
+  const maxY = Math.max(element.start.y, element.end.y) + (element.size + 12);
+  return point.x >= minX && point.x <= maxX && point.y >= minY && point.y <= maxY;
+}
+
+function renderDrawingElement(element: DrawingElement): ReactNode {
+  if (element.kind === "bucketFill") {
+    return (
+      <image
+        key={element.id}
+        href={element.href}
+        x={0}
+        y={0}
+        width={PAINT_BUCKET_W}
+        height={PAINT_BUCKET_H}
+        preserveAspectRatio="none"
+        className="pointer-events-none"
+      />
+    );
+  }
+  if (element.kind === "stroke") {
+    const isTexture = element.strokeStyle === "texture";
+    return (
+      <path
+        key={element.id}
+        d={getDrawingPath(element.points)}
+        fill="none"
+        stroke={element.color}
+        strokeWidth={element.size}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={isTexture ? `${Math.max(2, element.size * 0.85)} ${Math.max(3, element.size * 1.35)}` : undefined}
+        opacity={isTexture ? 0.92 : 1}
+      />
+    );
+  }
+
+  if (element.kind === "sticker") {
+    return (
+      <text
+        key={element.id}
+        x={element.point.x}
+        y={element.point.y}
+        fontSize={element.size * 3}
+        textAnchor="middle"
+        dominantBaseline="middle"
+      >
+        {element.sticker}
+      </text>
+    );
+  }
+
+  if (element.tool === "line") {
+    return (
+      <line
+        key={element.id}
+        x1={element.start.x}
+        y1={element.start.y}
+        x2={element.end.x}
+        y2={element.end.y}
+        stroke={element.color}
+        strokeWidth={element.size}
+        strokeLinecap="round"
+      />
+    );
+  }
+
+  if (element.tool === "rect") {
+    const x = Math.min(element.start.x, element.end.x);
+    const y = Math.min(element.start.y, element.end.y);
+    const width = Math.abs(element.end.x - element.start.x);
+    const height = Math.abs(element.end.y - element.start.y);
+    return (
+      <rect
+        key={element.id}
+        x={x}
+        y={y}
+        width={width}
+        height={height}
+        fill={element.week >= 3 ? element.color : "none"}
+        fillOpacity={element.week >= 3 ? 0.18 : 0}
+        stroke={element.color}
+        strokeWidth={element.size}
+        rx={16}
+      />
+    );
+  }
+
+  const cx = (element.start.x + element.end.x) / 2;
+  const cy = (element.start.y + element.end.y) / 2;
+  const rx = Math.abs(element.end.x - element.start.x) / 2;
+  const ry = Math.abs(element.end.y - element.start.y) / 2;
+  return (
+    <ellipse
+      key={element.id}
+      cx={cx}
+      cy={cy}
+      rx={rx}
+      ry={ry}
+      fill={element.week >= 3 ? element.color : "none"}
+      fillOpacity={element.week >= 3 ? 0.18 : 0}
+      stroke={element.color}
+      strokeWidth={element.size}
+    />
+  );
+}
+
 function createEmptyMissionBoard(): Record<WeekNumber, Record<string, MissionRecord>> {
   return {
     1: {},
@@ -941,6 +1547,13 @@ function getCookingMvpBadge(week: WeekNumber): { badge: string; title: string } 
   if (week === 2) return { badge: "🍅", title: "레시피 MVP" };
   if (week === 3) return { badge: "🔥", title: "조리 MVP" };
   return { badge: "🍕", title: "피날레 MVP" };
+}
+
+function getDrawingMvpBadge(week: WeekNumber): { badge: string; title: string } {
+  if (week === 1) return { badge: "🖼️", title: "기획 MVP" };
+  if (week === 2) return { badge: "✏️", title: "스케치 MVP" };
+  if (week === 3) return { badge: "🎨", title: "채색 MVP" };
+  return { badge: "✨", title: "피날레 데코 MVP" };
 }
 
 function clampGauge(value: number): number {
@@ -1183,14 +1796,16 @@ function SeasonStepRow({
   progressWeek,
   seasonComplete,
   labels,
+  className,
 }: {
   currentWeek: WeekNumber;
   progressWeek: number;
   seasonComplete: boolean;
   labels: string[];
+  className?: string;
 }) {
   return (
-    <div className="mt-4 grid grid-cols-4 gap-1.5 sm:gap-2">
+    <div className={`mt-4 grid grid-cols-4 gap-1.5 sm:gap-2 ${className ?? ""}`}>
       {[1, 2, 3, 4].map((week) => {
         const unlocked = week <= progressWeek || seasonComplete;
         const current = week === currentWeek;
@@ -2585,7 +3200,7 @@ function CoopMenu({
 }) {
   return (
     <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <section className="grid gap-4 lg:grid-cols-3">
+      <section className="grid gap-4 lg:grid-cols-4">
         <button
           type="button"
           onClick={() => {
@@ -2643,6 +3258,36 @@ function CoopMenu({
             </div>
             <div className="mt-4 flex items-center justify-center">
               <PizzaCookingStage progressWeek={3} seasonComplete={false} />
+            </div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            playClick();
+            onSelect("drawing");
+          }}
+          className="rounded-3xl border border-violet-300/30 bg-gradient-to-br from-violet-500/20 to-sky-400/10 p-6 text-left hover:bg-violet-500/25 transition"
+        >
+          <h3 className="text-2xl font-black text-slate-800">공동 그림 그리기</h3>
+          <p className="mt-2 text-sm text-slate-600">하나의 주제로 1주부터 4주까지 함께 그림을 완성하는 협력 게임이에요.</p>
+          <div className="mt-5 rounded-2xl border border-violet-200/70 bg-white/60 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-slate-500">샘플 주제</span>
+              <span className="text-sm font-semibold text-violet-600">여름 바닷가</span>
+            </div>
+            <div className="mt-4 flex min-h-[16rem] items-center justify-center">
+              <div className="relative h-44 w-full max-w-[14rem] overflow-hidden rounded-[2rem] border border-violet-200 bg-gradient-to-b from-sky-100 via-cyan-50 to-amber-50">
+                <div className="absolute left-1/2 top-6 -translate-x-1/2 text-3xl">☀️</div>
+                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-blue-300/80 to-cyan-200/40" />
+                <div className="absolute left-1/2 bottom-6 h-14 w-40 -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-yellow-100 to-amber-300" />
+                <div className="absolute left-5 bottom-11 text-3xl">🌴</div>
+                <div className="absolute right-5 bottom-10 text-3xl">🌈</div>
+                <div className="absolute left-1/2 top-[4.9rem] -translate-x-1/2 text-3xl">🎨</div>
+                <div className="absolute left-[28%] top-[4.2rem] text-xl text-violet-500">〰️</div>
+                <div className="absolute right-[20%] top-[5.2rem] text-xl text-rose-400">⭐</div>
+              </div>
             </div>
           </div>
         </button>
@@ -4291,6 +4936,1781 @@ function IslandEscapeGame({
   );
 }
 
+function DrawingCoopGame({
+  onBackToMenu,
+}: {
+  onBackToMenu: () => void;
+}) {
+  const recognitionRef = useRef<any>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const elementsRef = useRef<DrawingElement[]>([]);
+  const moveHoldTimerRef = useRef<number | null>(null);
+  const moveHoldStartRef = useRef<DrawingPoint | null>(null);
+  const moveTargetIdRef = useRef<string | null>(null);
+  const lastMovePointerRef = useRef<DrawingPoint | null>(null);
+  const [players, setPlayers] = useState<CoopPlayer[]>(() => sortPlayersByPoints(MOCK_PLAYERS));
+  const [selectedUserId, setSelectedUserId] = useState("p3");
+  const [mobileInfoSection, setMobileInfoSection] = useState<MobileInfoSection>("selected");
+  const [currentWeek, setCurrentWeek] = useState<WeekNumber>(1);
+  const [progressWeek, setProgressWeek] = useState(1);
+  const [seasonComplete, setSeasonComplete] = useState(false);
+  const [weekResolved, setWeekResolved] = useState(false);
+  const [weekStatusMessage, setWeekStatusMessage] = useState("빈 캔버스에서 시작해 배경 투표와 주제 선택부터 진행해 보세요.");
+  const [backgroundTheme, setBackgroundTheme] = useState<DrawingTheme>("blue");
+  const [selectedSubject, setSelectedSubject] = useState<DrawingSubject | null>(null);
+  const [themeVotes, setThemeVotes] = useState<Record<WeekNumber, Record<string, DrawingTheme>>>(() => ({ 1: {}, 2: {}, 3: {}, 4: {} }));
+  const [tool, setTool] = useState<DrawingTool>("pen");
+  const [selectedColor, setSelectedColor] = useState("#1e293b");
+  const [selectedSize, setSelectedSize] = useState(8);
+  const [selectedSticker, setSelectedSticker] = useState(DRAWING_STICKERS[0]);
+  const [bonusPaletteColors, setBonusPaletteColors] = useState<string[]>([]);
+  const [bonusStickerEmojis, setBonusStickerEmojis] = useState<string[]>([]);
+  /** -1: 액자 숨김, 0 이상: SPARKLE_FINISH_FRAME_THEMES 인덱스 */
+  const [sparkleFrameStyleIndex, setSparkleFrameStyleIndex] = useState(-1);
+  const [sketchTextureUnlocked, setSketchTextureUnlocked] = useState(false);
+  const [sketchStrokeStyle, setSketchStrokeStyle] = useState<DrawingStrokeStyle>("solid");
+  const [elementMoveUnlocked, setElementMoveUnlocked] = useState(false);
+  const [compositionGuideVisible, setCompositionGuideVisible] = useState(false);
+  const [movingElementId, setMovingElementId] = useState<string | null>(null);
+  const [colorBucketUnlocked, setColorBucketUnlocked] = useState(false);
+  const [gradientOverlayLevel, setGradientOverlayLevel] = useState(0);
+  const [themeGauge, setThemeGauge] = useState(0);
+  const [drawGauge, setDrawGauge] = useState(0);
+  const [stickerGauge, setStickerGauge] = useState(0);
+  const [actionTokens, setActionTokens] = useState<Record<string, number>>(() => getDrawingTokensForWeek(1));
+  const [stickerAllowances, setStickerAllowances] = useState<Record<string, number>>(() => ({ p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 }));
+  const [stickerUsages, setStickerUsages] = useState<Record<string, number>>(() => ({ p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 }));
+  const [actionLogs, setActionLogs] = useState<SharedLog[]>(DRAWING_INITIAL_LOGS);
+  const [elements, setElements] = useState<DrawingElement[]>([]);
+  elementsRef.current = elements;
+  const [draft, setDraft] = useState<
+    | { kind: "pen"; points: DrawingPoint[] }
+    | { kind: "shape"; tool: "line" | "rect" | "circle"; start: DrawingPoint; end: DrawingPoint }
+    | null
+  >(null);
+  const [actionsTakenThisWeek, setActionsTakenThisWeek] = useState(0);
+  const [surpriseCardVisible, setSurpriseCardVisible] = useState(false);
+  const [bonusChoicesUnlocked, setBonusChoicesUnlocked] = useState(false);
+  const [missionDifficulty, setMissionDifficulty] = useState<MissionDifficulty>("easy");
+  const [missionBoard, setMissionBoard] = useState<Record<WeekNumber, Record<string, MissionRecord>>>(() => createEmptyMissionBoard());
+  const [missionMessage, setMissionMessage] = useState("카드를 열고 그림 미션을 시작해 보세요.");
+  const [missionListening, setMissionListening] = useState(false);
+  const [teamNotices, setTeamNotices] = useState<TeamNotice[]>([]);
+  const [leaderMessageTargetUserId, setLeaderMessageTargetUserId] = useState("p1");
+  const [leaderMessage, setLeaderMessage] = useState(DRAWING_LEADER_MESSAGES[0]);
+  const [toastNotices, setToastNotices] = useState<ToastNotice[]>([]);
+  const [latestMissionAccuracy, setLatestMissionAccuracy] = useState<number | null>(null);
+  const [mvpReward, setMvpReward] = useState<MvpRewardState | null>(null);
+  const [finalCompletedByName, setFinalCompletedByName] = useState<string | null>(null);
+  const [missionPromptCursor, setMissionPromptCursor] = useState<Record<MissionDifficulty, number>>({ easy: 0, medium: 0, hard: 0 });
+  const [showFinishInfo, setShowFinishInfo] = useState(false);
+  const [missionBurst, setMissionBurst] = useState(false);
+
+  const mePlayer = useMemo(() => players.find((player) => player.isMe) ?? players[2] ?? players[0], [players]);
+  const selectedPlayer = useMemo(() => players.find((player) => player.id === selectedUserId) ?? players[0], [players, selectedUserId]);
+  const selectedRank = useMemo(() => players.findIndex((player) => player.id === selectedPlayer.id) + 1, [players, selectedPlayer.id]);
+  const selectedPermission = useMemo(() => getPermissionByRank(selectedRank), [selectedRank]);
+  const currentConfig = DRAWING_WEEK_CONFIGS[currentWeek];
+  const selectedTokens = actionTokens[selectedPlayer.id] ?? 0;
+  const canUseActions = !weekResolved && !seasonComplete && selectedTokens > 0;
+  const drawingEnabled = currentWeek >= 2 && canUseActions;
+  const stageGauge = useMemo(
+    () => (currentWeek === 1 ? themeGauge : currentWeek === 4 ? stickerGauge : drawGauge),
+    [currentWeek, drawGauge, stickerGauge, themeGauge]
+  );
+  const stageGaugeLabel = currentWeek === 1 ? "기획 완성도" : currentWeek === 2 ? "스케치 완성도" : currentWeek === 3 ? "채색 완성도" : "장식 완성도";
+  const totalCompletionGauge = useMemo(() => clampGauge(themeGauge + drawGauge + stickerGauge), [themeGauge, drawGauge, stickerGauge]);
+  const weekLogs = useMemo(() => actionLogs.filter((log) => log.week === currentWeek || log.week === 0), [actionLogs, currentWeek]);
+  const myAllLogs = useMemo(() => actionLogs.filter((log) => log.userId === mePlayer.id), [actionLogs, mePlayer.id]);
+  const myFinalWeekLogs = useMemo(() => actionLogs.filter((log) => log.userId === mePlayer.id && log.week === 4), [actionLogs, mePlayer.id]);
+  const themeMeta = DRAWING_THEME_OPTIONS.find((theme) => theme.id === backgroundTheme) ?? DRAWING_THEME_OPTIONS[0];
+  const subjectMeta = selectedSubject ? DRAWING_SUBJECT_OPTIONS.find((subject) => subject.id === selectedSubject) ?? null : null;
+  const planningVotes = themeVotes[1];
+  const themeVoteCounts = useMemo(
+    () =>
+      Object.values(planningVotes).reduce<Record<DrawingTheme, number>>(
+        (acc, themeId) => {
+          acc[themeId] += 1;
+          return acc;
+        },
+        { blue: 0, sunset: 0, tropical: 0 }
+      ),
+    [planningVotes]
+  );
+  const votesSubmitted = Object.keys(planningVotes).length;
+  const winningThemeId = useMemo(() => {
+    return (Object.entries(themeVoteCounts).sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      if (a[0] === backgroundTheme) return -1;
+      if (b[0] === backgroundTheme) return 1;
+      return 0;
+    })[0]?.[0] as DrawingTheme) ?? backgroundTheme;
+  }, [backgroundTheme, themeVoteCounts]);
+  const paletteColors = useMemo(() => {
+    const baseColors = currentWeek === 2 ? ["#1e293b", "#475569", "#94a3b8", "#ffffff"] : DRAWING_COLORS;
+    return [...baseColors, ...bonusPaletteColors.filter((color) => !baseColors.includes(color))];
+  }, [bonusPaletteColors, currentWeek]);
+  const stickerPalette = useMemo(() => [...DRAWING_STICKERS, ...bonusStickerEmojis], [bonusStickerEmojis]);
+  const activeColor = paletteColors.includes(selectedColor) ? selectedColor : paletteColors[0];
+  const weekMissionRecords = missionBoard[currentWeek];
+  const selectedMissionRecord = weekMissionRecords[selectedPlayer.id];
+  const selectedMissionAttempts = selectedMissionRecord?.attempts ?? 0;
+  const currentPrompt = getMissionPromptFromSet(DRAWING_MISSION_PROMPTS, currentWeek, missionDifficulty, missionPromptCursor[missionDifficulty]);
+  const activeNotice = useMemo(() => teamNotices.find((notice) => notice.week === currentWeek && notice.toUserId === selectedPlayer.id) ?? null, [currentWeek, selectedPlayer.id, teamNotices]);
+  const topNotice = useMemo(() => teamNotices.find((notice) => notice.week === currentWeek && notice.toUserId === selectedPlayer.id) ?? null, [currentWeek, selectedPlayer.id, teamNotices]);
+  const leaderMessageTargets = useMemo(() => players.filter((player) => player.id !== selectedPlayer.id), [players, selectedPlayer.id]);
+  const currentMvpUserId = useMemo(() => {
+    const entries = Object.entries(weekMissionRecords);
+    if (entries.length === 0) return null;
+    entries.sort((a, b) => {
+      if (b[1].totalScore !== a[1].totalScore) return b[1].totalScore - a[1].totalScore;
+      if (b[1].bestScore !== a[1].bestScore) return b[1].bestScore - a[1].bestScore;
+      if (a[1].attempts !== b[1].attempts) return a[1].attempts - b[1].attempts;
+      const aName = players.find((player) => player.id === a[0])?.name ?? "";
+      const bName = players.find((player) => player.id === b[0])?.name ?? "";
+      return aName.localeCompare(bName);
+    });
+    return entries[0][0];
+  }, [players, weekMissionRecords]);
+  const currentMvpPlayer = useMemo(() => players.find((player) => player.id === currentMvpUserId) ?? null, [currentMvpUserId, players]);
+  const canAttemptMission = bonusChoicesUnlocked && !seasonComplete && !weekResolved && selectedMissionAttempts < 3;
+  /** 4주차는 진입 시 기본 1회 등으로 allowance가 채워지므로, 미설정(undefined)은 1로 간주 */
+  const currentStickerAllowance =
+    currentWeek === 4 ? stickerAllowances[selectedPlayer.id] ?? 1 : stickerAllowances[selectedPlayer.id] ?? 0;
+  const currentStickerUsage = stickerUsages[selectedPlayer.id] ?? 0;
+  const currentStickerRemaining = Math.max(0, currentStickerAllowance - currentStickerUsage);
+  const sparkleFrameTheme =
+    sparkleFrameStyleIndex >= 0
+      ? SPARKLE_FINISH_FRAME_THEMES[sparkleFrameStyleIndex % SPARKLE_FINISH_FRAME_THEMES.length]
+      : null;
+  const canResolveWeek = !weekResolved && !seasonComplete && stageGauge >= currentConfig.threshold && currentMvpUserId !== null && selectedPlayer.id === currentMvpUserId;
+  const currentStageLabel = seasonComplete
+    ? "팀 공동 그림 완성"
+    : currentWeek === 1
+    ? "빈 캔버스에서 기획 중"
+    : currentWeek === 2
+    ? "연필 스케치를 쌓는 중"
+    : currentWeek === 3
+    ? "채색으로 분위기를 올리는 중"
+    : "스티커와 장식으로 마감 중";
+  const subjectBadges = subjectMeta
+    ? subjectMeta.id === "festival"
+      ? ["🎆", "🎵", "🏮"]
+      : subjectMeta.id === "sea"
+      ? ["🐠", "⛵", "🪸"]
+      : ["🏖️", "🛟", "⛱️"]
+    : ["📝", "🎨", "🖼️"];
+  const toolOptions: Array<{ id: DrawingTool; label: string; minWeek: number }> = [
+    { id: "pen", label: "펜", minWeek: 2 },
+    { id: "line", label: "선", minWeek: 2 },
+    { id: "rect", label: "사각형", minWeek: 2 },
+    { id: "circle", label: "원", minWeek: 2 },
+    { id: "move", label: "이동", minWeek: 2 },
+    { id: "eraser", label: "지우개", minWeek: 2 },
+    { id: "bucket", label: "페인트통", minWeek: 3 },
+    { id: "sticker", label: "스티커", minWeek: 4 },
+  ];
+  const toolLabel = toolOptions.find((item) => item.id === tool)?.label ?? "펜";
+
+  const pushToast = (title: string, body: string, tone: ToastNotice["tone"]) => {
+    const id = `drawing-toast-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    setToastNotices((prev) => [{ id, title, body, tone }, ...prev].slice(0, 3));
+    window.setTimeout(() => setToastNotices((prev) => prev.filter((item) => item.id !== id)), 3200);
+  };
+
+  const appendPassiveLog = (tone: SharedLog["tone"], userId: string, userName: string, summary: string, detail: string) => {
+    setActionLogs((prev) => [{ id: `drawing-passive-${Date.now()}-${prev.length}`, week: currentWeek, userId, userName, tone, summary, detail }, ...prev]);
+  };
+
+  const appendLog = (tone: SharedLog["tone"], summary: string, detail: string) => {
+    setActionLogs((prev) => [
+      {
+        id: `drawing-log-${Date.now()}-${prev.length}`,
+        week: currentWeek,
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        tone,
+        summary,
+        detail,
+      },
+      ...prev,
+    ]);
+  };
+
+  const revealSurpriseCard = () => {
+    if (surpriseCardVisible || seasonComplete || weekResolved) return;
+    setSurpriseCardVisible(true);
+    appendPassiveLog("violet", "system", "SYSTEM", `${currentWeek}주차에 서프라이즈 미션 카드가 등장했어요.`, "카드를 열어 음성 미션에 성공하면 더 많은 행동권을 받을 수 있어요.");
+  };
+
+  const spendAction = (pointGain: number) => {
+    if (actionsTakenThisWeek === 0) revealSurpriseCard();
+    setActionTokens((prev) => ({
+      ...prev,
+      [selectedPlayer.id]: Math.max(0, (prev[selectedPlayer.id] ?? 0) - 1),
+    }));
+    setPlayers((prev) => sortPlayersByPoints(prev.map((player) => (player.id === selectedPlayer.id ? { ...player, points: player.points + pointGain } : player))));
+    setActionsTakenThisWeek((prev) => prev + 1);
+  };
+
+  const grantExtraDrawTokens = (userId: string) => {
+    setActionTokens((prev) => ({ ...prev, [userId]: (prev[userId] ?? 0) + 3 }));
+  };
+
+  const resetDrawingGame = () => {
+    recognitionRef.current?.stop();
+    playClick();
+    setPlayers(sortPlayersByPoints(MOCK_PLAYERS));
+    setSelectedUserId("p3");
+    setMobileInfoSection("selected");
+    setCurrentWeek(1);
+    setProgressWeek(1);
+    setSeasonComplete(false);
+    setWeekResolved(false);
+    setWeekStatusMessage("빈 캔버스에서 시작해 배경 투표와 주제 선택부터 진행해 보세요.");
+    setBackgroundTheme("blue");
+    setSelectedSubject(null);
+    setThemeVotes({ 1: {}, 2: {}, 3: {}, 4: {} });
+    setTool("pen");
+    setSelectedColor("#1e293b");
+    setSelectedSize(8);
+    setSelectedSticker(DRAWING_STICKERS[0]);
+    setBonusPaletteColors([]);
+    setBonusStickerEmojis([]);
+    setSparkleFrameStyleIndex(-1);
+    setSketchTextureUnlocked(false);
+    setSketchStrokeStyle("solid");
+    setElementMoveUnlocked(false);
+    setCompositionGuideVisible(false);
+    setColorBucketUnlocked(false);
+    setMovingElementId(null);
+    moveTargetIdRef.current = null;
+    lastMovePointerRef.current = null;
+    moveHoldStartRef.current = null;
+    if (moveHoldTimerRef.current !== null) {
+      window.clearTimeout(moveHoldTimerRef.current);
+      moveHoldTimerRef.current = null;
+    }
+    setGradientOverlayLevel(0);
+    setThemeGauge(0);
+    setDrawGauge(0);
+    setStickerGauge(0);
+    setActionTokens(getDrawingTokensForWeek(1));
+    setStickerAllowances({ p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 });
+    setStickerUsages({ p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 });
+    setActionLogs(DRAWING_INITIAL_LOGS);
+    setElements([]);
+    setDraft(null);
+    setActionsTakenThisWeek(0);
+    setSurpriseCardVisible(false);
+    setBonusChoicesUnlocked(false);
+    setMissionDifficulty("easy");
+    setMissionBoard(createEmptyMissionBoard());
+    setMissionMessage("카드를 열고 그림 미션을 시작해 보세요.");
+    setMissionListening(false);
+    setTeamNotices([]);
+    setLeaderMessageTargetUserId("p1");
+    setLeaderMessage(DRAWING_LEADER_MESSAGES[0]);
+    setToastNotices([]);
+    setLatestMissionAccuracy(null);
+    setMvpReward(null);
+    setFinalCompletedByName(null);
+    setMissionPromptCursor({ easy: 0, medium: 0, hard: 0 });
+    setShowFinishInfo(false);
+    setMissionBurst(false);
+  };
+
+  const handleThemeVote = (themeId: DrawingTheme, label: string) => {
+    if (!canUseActions || currentWeek !== 1) return;
+    const previousVote = planningVotes[selectedPlayer.id];
+    if (previousVote === themeId) {
+      setWeekStatusMessage(`${selectedPlayer.name}님은 이미 ${label}에 투표했어요.`);
+      return;
+    }
+    playClick();
+    setThemeVotes((prev) => ({ ...prev, 1: { ...prev[1], [selectedPlayer.id]: themeId } }));
+    setThemeGauge((prev) => clampGauge(prev + 8));
+    appendLog("cyan", `${selectedPlayer.name}님이 ${label} 배경에 투표했어요.`, "투표 결과가 리더의 기획 보드에 반영됐어요.");
+    spendAction(2);
+  };
+
+  const handleApplyTheme = (themeId: DrawingTheme, label: string) => {
+    if (!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme) return;
+    playClick();
+    setBackgroundTheme(themeId);
+    setThemeGauge((prev) => clampGauge(prev + 10));
+    appendLog("emerald", `${selectedPlayer.name}님이 ${label} 배경을 반영했어요.`, "리더가 투표 결과를 캔버스 기본 배경에 적용했어요.");
+    spendAction(4);
+  };
+
+  const handleSelectSubject = (subjectId: DrawingSubject, label: string) => {
+    if (!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme) return;
+    if (selectedSubject === subjectId) {
+      setWeekStatusMessage(`이미 이번 시즌 주제가 ${label}(으)로 정해져 있어요.`);
+      return;
+    }
+    playClick();
+    setSelectedSubject(subjectId);
+    setThemeGauge((prev) => clampGauge(prev + 12));
+    appendLog("violet", `${selectedPlayer.name}님이 공동 그림 주제를 ${label}(으)로 정했어요.`, "이제 다음 주부터 같은 주제로 스케치를 시작할 수 있어요.");
+    spendAction(4);
+  };
+
+  const commitDrawingElement = (element: DrawingElement) => {
+    setElements((prev) => [...prev, element]);
+    if (element.kind === "bucketFill") {
+      setDrawGauge((prev) => clampGauge(prev + 10));
+      appendLog("cyan", `${selectedPlayer.name}님이 페인트통으로 영역을 채웠어요.`, "닫힌 선 안쪽으로 색이 퍼졌어요.");
+      setWeekStatusMessage("페인트통으로 영역이 채워졌어요.");
+      spendAction(3);
+      return;
+    }
+    if (element.kind === "sticker") {
+      setStickerUsages((prev) => ({ ...prev, [selectedPlayer.id]: (prev[selectedPlayer.id] ?? 0) + 1 }));
+      setStickerGauge((prev) => clampGauge(prev + 9));
+      appendLog("violet", `${selectedPlayer.name}님이 ${element.sticker} 스티커를 붙였어요.`, `${currentWeek}주차 그림에 마지막 장식 포인트가 추가됐어요.`);
+      setWeekStatusMessage(`스티커 장식이 추가됐어요. 남은 횟수 ${Math.max(0, currentStickerRemaining - 1)}회`);
+      spendAction(3);
+      return;
+    }
+
+    const nextGain = currentWeek === 2 ? 9 : currentWeek === 3 ? 10 : 7;
+    setDrawGauge((prev) => clampGauge(prev + nextGain));
+    appendLog(
+      element.kind === "shape" ? "cyan" : "amber",
+      `${selectedPlayer.name}님이 ${element.kind === "shape" ? "도형" : "선"} 작업을 했어요.`,
+      `${currentConfig.phaseLabel} 단계 그림이 더 구체적으로 다듬어졌어요.`
+    );
+    setWeekStatusMessage(currentWeek === 2 ? "스케치 선이 더 또렷해졌어요." : currentWeek === 3 ? "채색 레이어가 더 쌓였어요." : "마무리 선이 추가됐어요.");
+    spendAction(3);
+  };
+
+  const removeElementAtPoint = (point: DrawingPoint) => {
+    const list = elementsRef.current;
+    let hit: DrawingElement | null = null;
+    for (let i = list.length - 1; i >= 0; i -= 1) {
+      if (isDrawingElementHit(list[i], point)) {
+        hit = list[i];
+        break;
+      }
+    }
+    if (!hit) return;
+    if (hit.kind === "sticker") {
+      setStickerUsages((prev) => ({
+        ...prev,
+        [hit.userId]: Math.max(0, (prev[hit.userId] ?? 0) - 1),
+      }));
+      setStickerGauge((prev) => clampGauge(prev - 9));
+    }
+    setElements((prev) => prev.filter((el) => el.id !== hit!.id));
+    appendLog("orange", `${selectedPlayer.name}님이 지우개로 수정했어요.`, "캔버스에서 요소를 지웠어요.");
+    setWeekStatusMessage(hit.kind === "sticker" ? "지우개로 스티커를 지웠어요." : "지우개로 일부를 수정했어요.");
+    spendAction(2);
+  };
+
+  const clearMoveHoldTimer = () => {
+    if (moveHoldTimerRef.current !== null) {
+      window.clearTimeout(moveHoldTimerRef.current);
+      moveHoldTimerRef.current = null;
+    }
+    moveHoldStartRef.current = null;
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!drawingEnabled) return;
+    const selectedTool = toolOptions.find((item) => item.id === tool);
+    if (!selectedTool || currentWeek < selectedTool.minWeek) return;
+    const point = getDrawingPointFromEvent(event, svgRef);
+
+    if (tool === "move") {
+      if (currentWeek !== 2 || !elementMoveUnlocked) return;
+      clearMoveHoldTimer();
+      moveHoldStartRef.current = point;
+      moveHoldTimerRef.current = window.setTimeout(() => {
+        moveHoldTimerRef.current = null;
+        const start = moveHoldStartRef.current;
+        moveHoldStartRef.current = null;
+        if (!start) return;
+        const hit = getTopmostElementAtPoint(elementsRef.current, start);
+        if (!hit) return;
+        moveTargetIdRef.current = hit.id;
+        lastMovePointerRef.current = start;
+        setMovingElementId(hit.id);
+      }, 420);
+      return;
+    }
+
+    if (tool === "bucket") {
+      if (currentWeek !== 3 || !colorBucketUnlocked) return;
+      const built = buildPaintBucketDataUrl(elements, point, activeColor);
+      if (!built) {
+        setWeekStatusMessage("선으로 닫힌 안쪽을 눌러 주세요. 이미 채워졌거나 막힌 곳은 채워지지 않아요.");
+        return;
+      }
+      playClick();
+      commitDrawingElement({
+        id: `drawing-bucket-${Date.now()}`,
+        kind: "bucketFill",
+        href: built.href,
+        hitMask: built.hitMask,
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        week: 3,
+      });
+      return;
+    }
+
+    if (tool === "eraser") {
+      removeElementAtPoint(point);
+      return;
+    }
+
+    if (tool === "sticker") {
+      if (currentWeek !== 4 || currentStickerRemaining <= 0) {
+        setWeekStatusMessage(currentWeek !== 4 ? "스티커는 4주차부터 사용할 수 있어요." : "이 유저의 스티커 횟수를 모두 사용했어요.");
+        return;
+      }
+      commitDrawingElement({
+        id: `drawing-sticker-${Date.now()}`,
+        kind: "sticker",
+        sticker: selectedSticker,
+        point,
+        size: getStickerSizeFromThickness(selectedSize),
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        week: currentWeek,
+      });
+      return;
+    }
+
+    if (tool === "pen") {
+      setDraft({ kind: "pen", points: [point] });
+      return;
+    }
+
+    setDraft({ kind: "shape", tool, start: point, end: point });
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const point = getDrawingPointFromEvent(event, svgRef);
+
+    if (moveTargetIdRef.current) {
+      const last = lastMovePointerRef.current;
+      const targetId = moveTargetIdRef.current;
+      if (last) {
+        const dx = point.x - last.x;
+        const dy = point.y - last.y;
+        lastMovePointerRef.current = point;
+        setElements((prev) => prev.map((el) => (el.id === targetId ? translateDrawingElement(el, dx, dy) : el)));
+      }
+      return;
+    }
+
+    if (tool === "move" && moveHoldStartRef.current !== null && moveHoldTimerRef.current !== null) {
+      const start = moveHoldStartRef.current;
+      if (getDrawingDistance(start, point) > 14) clearMoveHoldTimer();
+      return;
+    }
+
+    if (!draft) return;
+    if (draft.kind === "pen") {
+      setDraft((prev) => {
+        if (!prev || prev.kind !== "pen") return prev;
+        const lastPoint = prev.points[prev.points.length - 1];
+        if (getDrawingDistance(lastPoint, point) < 4) return prev;
+        return { ...prev, points: [...prev.points, point] };
+      });
+      return;
+    }
+    setDraft((prev) => (prev && prev.kind === "shape" ? { ...prev, end: point } : prev));
+  };
+
+  const finishPointer = () => {
+    clearMoveHoldTimer();
+    if (moveTargetIdRef.current) {
+      moveTargetIdRef.current = null;
+      lastMovePointerRef.current = null;
+      setMovingElementId(null);
+      appendLog("amber", `${selectedPlayer.name}님이 스케치 요소를 옮겼어요.`, "길게 눌러 잡은 뒤 위치를 조정했어요.");
+      setWeekStatusMessage("요소 위치를 옮겼어요.");
+      return;
+    }
+    commitDraft();
+  };
+
+  const commitDraft = () => {
+    if (!draft || currentWeek < 2) return;
+    if (draft.kind === "pen") {
+      const points = draft.points.length < 2 ? [...draft.points, draft.points[0]] : draft.points;
+      commitDrawingElement({
+        id: `drawing-stroke-${Date.now()}`,
+        kind: "stroke",
+        tool: "pen",
+        points,
+        color: activeColor,
+        size: selectedSize,
+        strokeStyle: currentWeek === 2 ? sketchStrokeStyle : undefined,
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        week: currentWeek,
+      });
+      setDraft(null);
+      return;
+    }
+
+    const width = Math.abs(draft.end.x - draft.start.x);
+    const height = Math.abs(draft.end.y - draft.start.y);
+    if (width < 6 && height < 6) {
+      setDraft(null);
+      return;
+    }
+
+    commitDrawingElement({
+      id: `drawing-shape-${Date.now()}`,
+      kind: "shape",
+      tool: draft.tool,
+      start: draft.start,
+      end: draft.end,
+      color: activeColor,
+      size: selectedSize,
+      userId: selectedPlayer.id,
+      userName: selectedPlayer.name,
+      week: currentWeek,
+    });
+    setDraft(null);
+  };
+
+  const previewDraft: DrawingElement | null = useMemo(() => {
+    if (!draft || currentWeek < 2) return null;
+    if (draft.kind === "pen") {
+      const points = draft.points.length < 2 ? [...draft.points, draft.points[0]] : draft.points;
+      return {
+        id: "drawing-draft",
+        kind: "stroke",
+        tool: "pen",
+        points,
+        color: activeColor,
+        size: selectedSize,
+        strokeStyle: currentWeek === 2 ? sketchStrokeStyle : undefined,
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        week: currentWeek,
+      };
+    }
+    return {
+      id: "drawing-draft",
+      kind: "shape",
+      tool: draft.tool,
+      start: draft.start,
+      end: draft.end,
+      color: activeColor,
+      size: selectedSize,
+      userId: selectedPlayer.id,
+      userName: selectedPlayer.name,
+      week: currentWeek,
+    };
+  }, [activeColor, currentWeek, draft, selectedPlayer.id, selectedPlayer.name, selectedSize, sketchStrokeStyle]);
+
+  const moveToNextWeek = (nextWeek: WeekNumber) => {
+    setCurrentWeek(nextWeek);
+    setProgressWeek(nextWeek);
+    setWeekResolved(false);
+    setDraft(null);
+    setActionTokens(getDrawingTokensForWeek(nextWeek));
+    setActionsTakenThisWeek(0);
+    setSurpriseCardVisible(false);
+    setBonusChoicesUnlocked(false);
+    setMissionDifficulty("easy");
+    setMissionMessage("카드를 열고 그림 미션을 시작해 보세요.");
+    setLatestMissionAccuracy(null);
+    setMissionListening(false);
+    setLeaderMessage(DRAWING_LEADER_MESSAGES[Math.min(nextWeek - 1, DRAWING_LEADER_MESSAGES.length - 1)]);
+    setMvpReward(null);
+    setMissionPromptCursor({ easy: 0, medium: 0, hard: 0 });
+    setShowFinishInfo(false);
+    setMissionBurst(false);
+    setGradientOverlayLevel(0);
+    setBonusStickerEmojis([]);
+    setSparkleFrameStyleIndex(-1);
+    setSketchTextureUnlocked(false);
+    setSketchStrokeStyle("solid");
+    setElementMoveUnlocked(false);
+    setCompositionGuideVisible(false);
+    setColorBucketUnlocked(false);
+    setMovingElementId(null);
+    moveTargetIdRef.current = null;
+    lastMovePointerRef.current = null;
+    clearMoveHoldTimer();
+    setTool(nextWeek === 4 ? "sticker" : "pen");
+    setSelectedColor(nextWeek === 2 ? "#1e293b" : DRAWING_COLORS[1]);
+    setSelectedSize(nextWeek === 2 ? 6 : 8);
+    setThemeGauge(nextWeek === 2 ? 10 : nextWeek === 3 ? 8 : 5);
+    setDrawGauge(0);
+    setStickerGauge(0);
+    setStickerUsages({ p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 });
+    setStickerAllowances(nextWeek === 4 ? { p1: 1, p2: 1, p3: 1, p4: 1, p5: 1 } : { p1: 0, p2: 0, p3: 0, p4: 0, p5: 0 });
+    setWeekStatusMessage(
+      nextWeek === 2
+        ? "2주차에 들어왔어요. 이제 큰 형태와 구도를 스케치해 보세요."
+        : nextWeek === 3
+        ? "3주차에 들어왔어요. 스케치 위에 색을 올려 보세요."
+        : "4주차에 들어왔어요. 스티커와 장식으로 마무리해 보세요."
+    );
+  };
+
+  const handleMissionFailure = (detail: string, accuracy = 0) => {
+    setMissionBoard((prev) => {
+      const currentRecord = prev[currentWeek][selectedPlayer.id] ?? { attempts: 0, successes: 0, totalScore: 0, bestScore: 0 };
+      return {
+        ...prev,
+        [currentWeek]: {
+          ...prev[currentWeek],
+          [selectedPlayer.id]: { ...currentRecord, attempts: currentRecord.attempts + 1, lastAccuracy: accuracy },
+        },
+      };
+    });
+    appendPassiveLog("orange", selectedPlayer.id, selectedPlayer.name, `${selectedPlayer.name}님이 그림 미션을 다시 시도해요.`, detail);
+    setMissionMessage(detail);
+    setLatestMissionAccuracy(accuracy);
+    setMissionPromptCursor((prev) => ({ ...prev, [missionDifficulty]: prev[missionDifficulty] + 1 }));
+  };
+
+  const handleMissionSuccess = (spokenText: string, accuracy: number) => {
+    const attemptNumber = selectedMissionAttempts + 1;
+    const score = calculateMissionScoreFromSet(DRAWING_MISSION_PROMPTS, currentWeek, missionDifficulty, attemptNumber);
+    const alreadyRewarded = selectedMissionRecord?.rewardClaimed ?? false;
+    setMissionBoard((prev) => {
+      const currentRecord = prev[currentWeek][selectedPlayer.id] ?? { attempts: 0, successes: 0, totalScore: 0, bestScore: 0 };
+      const nextBestScore = Math.max(currentRecord.bestScore, score);
+      return {
+        ...prev,
+        [currentWeek]: {
+          ...prev[currentWeek],
+          [selectedPlayer.id]: {
+            attempts: currentRecord.attempts + 1,
+            successes: currentRecord.successes + 1,
+            totalScore: currentRecord.totalScore + score,
+            bestScore: nextBestScore,
+            bestDifficulty: score >= nextBestScore ? missionDifficulty : currentRecord.bestDifficulty ?? missionDifficulty,
+            rewardClaimed: true,
+            lastAccuracy: accuracy,
+          },
+        },
+      };
+    });
+    setPlayers((prev) => sortPlayersByPoints(prev.map((player) => (player.id === selectedPlayer.id ? { ...player, points: player.points + score } : player))));
+    setBonusChoicesUnlocked(true);
+    if (!alreadyRewarded) grantExtraDrawTokens(selectedPlayer.id);
+    if (currentWeek === 4) {
+      setStickerAllowances((prev) => ({ ...prev, [selectedPlayer.id]: (prev[selectedPlayer.id] ?? 1) + 1 }));
+    }
+    appendPassiveLog(
+      "emerald",
+      selectedPlayer.id,
+      selectedPlayer.name,
+      `${selectedPlayer.name}님이 그림 미션에 성공했어요.`,
+      `난이도 ${getMissionDifficultyLabel(missionDifficulty)}, +${score}P, 추가 행동권 +3${currentWeek === 4 ? ", 스티커 횟수 +1" : ""}, 인식 문장: "${spokenText}".`
+    );
+    setMissionMessage("미션 성공! 이번 주에 더 많이 그릴 수 있게 됐어요.");
+    setLatestMissionAccuracy(accuracy);
+    setMissionPromptCursor((prev) => ({ ...prev, [missionDifficulty]: prev[missionDifficulty] + 1 }));
+    setMissionBurst(true);
+    window.setTimeout(() => setMissionBurst(false), 1800);
+    pushToast("그림 미션 성공", `${selectedPlayer.name}이(가) ${score}점을 얻고 추가 행동권을 받았어요.`, "emerald");
+  };
+
+  const startVoiceMission = () => {
+    if (!canAttemptMission) {
+      setMissionMessage("이 학생은 이번 주 그림 미션을 이미 3번 시도했어요.");
+      return;
+    }
+    if (weekResolved || seasonComplete) return;
+    const recognitionWindow = window as Window & { SpeechRecognition?: BrowserSpeechRecognitionCtor; webkitSpeechRecognition?: BrowserSpeechRecognitionCtor };
+    const SpeechRecognitionCtor = recognitionWindow.SpeechRecognition ?? recognitionWindow.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      setMissionMessage("이 브라우저에서는 음성 인식을 지원하지 않아요.");
+      return;
+    }
+    recognitionRef.current?.stop();
+    playClick();
+    setMissionListening(true);
+    const recognition = new SpeechRecognitionCtor();
+    recognitionRef.current = recognition;
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onresult = (event: any) => {
+      const spokenText = Array.from(event.results as ArrayLike<any>).map((result: any) => result[0]?.transcript ?? "").join(" ").trim();
+      const accuracy = getSpeechMatchScore(currentPrompt.text, spokenText);
+      const successThreshold = getMissionSuccessThreshold(missionDifficulty);
+      if (accuracy >= successThreshold) handleMissionSuccess(spokenText, accuracy);
+      else handleMissionFailure(`정확도 ${(accuracy * 100).toFixed(0)}% · 다시 도전`, accuracy);
+    };
+    recognition.onerror = () => handleMissionFailure("음성 인식 오류", 0);
+    recognition.onend = () => setMissionListening(false);
+    recognition.start();
+  };
+
+  const openSurpriseCard = () => {
+    if (!surpriseCardVisible) return;
+    playClick();
+    setBonusChoicesUnlocked(true);
+    setMissionMessage("");
+    setWeekStatusMessage("서프라이즈 카드가 열렸어요. 그림 미션을 시작해 보세요.");
+    appendPassiveLog("violet", "system", "SYSTEM", "보너스 미션 카드가 열렸어요.", "이번 주 그림 미션을 수행하면 추가 행동권을 받을 수 있어요.");
+  };
+
+  const handleLeaderMessage = () => {
+    const targetPlayer = players.find((player) => player.id === leaderMessageTargetUserId);
+    if (!targetPlayer || targetPlayer.id === selectedPlayer.id || !selectedPermission.canLeadTheme || !canUseActions) return;
+    playClick();
+    const notice: TeamNotice = {
+      id: `drawing-cheer-${Date.now()}`,
+      week: currentWeek,
+      fromUserId: selectedPlayer.id,
+      fromUserName: selectedPlayer.name,
+      toUserId: targetPlayer.id,
+      toUserName: targetPlayer.name,
+      message: leaderMessage,
+      createdAt: Date.now(),
+    };
+    setTeamNotices((prev) => [notice, ...prev.filter((item) => !(item.week === currentWeek && item.toUserId === targetPlayer.id))]);
+    setActionTokens((prev) => ({ ...prev, [targetPlayer.id]: (prev[targetPlayer.id] ?? 0) + 1 }));
+    setSelectedUserId(targetPlayer.id);
+    appendLog("violet", `${targetPlayer.name}에게 응원을 보냈어요.`, leaderMessage);
+    spendAction(2);
+    pushToast("응원 알림 전송", `${targetPlayer.name}에게 "${leaderMessage}" 알림을 보냈어요.`, "cyan");
+  };
+
+  const handleBonusAction = (option: ActionOption) => {
+    if (!canUseActions || !bonusChoicesUnlocked) return;
+    playClick();
+    if (currentWeek === 1) {
+      setThemeGauge((prev) => clampGauge(prev + option.delta));
+    } else if (currentWeek === 4) {
+      if (option.id !== "dr-card-12") {
+        setStickerGauge((prev) => clampGauge(prev + option.delta));
+      }
+      if (option.id === "dr-card-12") {
+        const prevAllow = stickerAllowances[selectedPlayer.id] ?? 1;
+        const usageNow = stickerUsages[selectedPlayer.id] ?? 0;
+        setStickerAllowances((prev) => {
+          const next = { ...prev };
+          for (const player of players) {
+            const id = player.id;
+            next[id] = (prev[id] ?? 1) + 2;
+          }
+          return next;
+        });
+        const remainingAfter = Math.max(0, prevAllow + 2 - usageNow);
+        setWeekStatusMessage(`팀 데코 카드! ${selectedPlayer.name}님 기준 남은 스티커 ${remainingAfter}회 (허용 횟수 +2)`);
+        pushToast("팀 데코 카드", `스티커 허용 +2회 · ${selectedPlayer.name}님 남은 ${remainingAfter}회 (장식 게이지는 오르지 않아요)`, "violet");
+      } else if (option.id === "dr-card-10") {
+        setBonusStickerEmojis((prev) => [...prev, "🎀", "💖", "📷"]);
+      } else if (option.id === "dr-card-11") {
+        setSparkleFrameStyleIndex((prev) => {
+          const next = prev < 0 ? 0 : (prev + 1) % SPARKLE_FINISH_FRAME_THEMES.length;
+          const theme = SPARKLE_FINISH_FRAME_THEMES[next]!;
+          setWeekStatusMessage(`반짝 마감: 액자가 ${theme.label} 톤으로 바뀌었어요.`);
+          pushToast("반짝 마감 카드", `${theme.label} 액자 — 누를 때마다 색이 바뀌어요.`, "violet");
+          return next;
+        });
+      }
+    } else {
+      setDrawGauge((prev) => clampGauge(prev + option.delta));
+    }
+
+    if (currentWeek === 2 && option.id === "dr-card-4") {
+      setSketchTextureUnlocked(true);
+      setWeekStatusMessage("스케치 연필 카드로 '텍스처 연필' 선을 팔레트에서 선택할 수 있어요.");
+      pushToast("연필 카드", "2주차 도구에서 실선 / 텍스처 연필을 고를 수 있어요.", "violet");
+    } else     if (currentWeek === 2 && option.id === "dr-card-5") {
+      setElementMoveUnlocked(true);
+      setTool("move");
+      setWeekStatusMessage("요소 이동 도구가 열렸어요. 이동을 고른 뒤 요소 위를 길게 눌러 옮겨 보세요.");
+      pushToast("요소 이동 카드", "이동 도구에서 길게 누르면 스케치를 잡아 옮길 수 있어요.", "violet");
+    } else if (currentWeek === 2 && option.id === "dr-card-6") {
+      const nextGuide = !compositionGuideVisible;
+      setCompositionGuideVisible(nextGuide);
+      setWeekStatusMessage(
+        nextGuide
+          ? "구도 가이드선을 켰어요. 스튜디오 패널의 해제로 끌 수 있어요."
+          : "구도 가이드선을 껐어요."
+      );
+    } else if (currentWeek === 3 && option.id === "dr-card-7") {
+      setColorBucketUnlocked(true);
+      setTool("bucket");
+      setWeekStatusMessage("페인트통이 열렸어요. 닫힌 선 안을 누르면 그 안만 색이 채워져요.");
+      pushToast("채색 부스트", "페인트통 도구로 스케치 안쪽만 골라 채울 수 있어요.", "violet");
+    } else if (currentWeek === 3 && option.id === "dr-card-8") {
+      const paletteBundles = [
+        ["#7c3aed", "#fb7185", "#22c55e"],
+        ["#38bdf8", "#f97316", "#fde047"],
+        ["#6366f1", "#f43f5e", "#10b981"],
+        ["#06b6d4", "#a855f7", "#84cc16"],
+      ];
+      const bundle = paletteBundles[bonusPaletteColors.length % paletteBundles.length];
+      setBonusPaletteColors((prev) => [...prev, ...bundle]);
+      setWeekStatusMessage("팔레트 카드로 새 색상 세트가 추가됐어요.");
+    } else if (currentWeek === 3 && option.id === "dr-card-9") {
+      setGradientOverlayLevel((prev) => prev + 1);
+      setWeekStatusMessage("그라데이션 카드로 캔버스 그라데이션이 더 진해졌어요.");
+    } else if (currentWeek === 4 && option.id === "dr-card-10") {
+      setWeekStatusMessage("피날레 스티커 카드로 새 스티커가 팔레트에 추가됐어요.");
+    } else if (currentWeek === 4) {
+      if (option.id !== "dr-card-12" && option.id !== "dr-card-11") {
+        setWeekStatusMessage("장식 보너스로 이번 주 작업량이 늘어났어요.");
+      }
+    } else {
+      setWeekStatusMessage("보너스 카드 효과로 이번 주 작업량이 늘어났어요.");
+    }
+    appendLog("violet", `${currentWeek}주차 보너스 카드 ${option.label}을(를) 사용했어요.`, option.detail);
+    spendAction(3);
+  };
+
+  const handleResolveWeek = () => {
+    if (weekResolved || seasonComplete) return;
+    if (!currentMvpUserId) {
+      setWeekStatusMessage("음성 미션으로 이번 주 MVP를 먼저 정해 주세요.");
+      return;
+    }
+    if (selectedPlayer.id !== currentMvpUserId) {
+      setWeekStatusMessage(`완료 버튼은 이번 주 MVP ${currentMvpPlayer?.name ?? ""}만 누를 수 있어요.`);
+      return;
+    }
+    if (stageGauge < currentConfig.threshold) {
+      setWeekStatusMessage(`${stageGaugeLabel}가 아직 ${currentConfig.threshold}%에 도달하지 않았어요.`);
+      return;
+    }
+    playClick();
+    const success = stageGauge >= currentConfig.threshold;
+    setActionLogs((prev) => [
+      {
+        id: `drawing-system-${Date.now()}`,
+        week: currentWeek,
+        userId: "system",
+        userName: "SYSTEM",
+        tone: success ? "emerald" : "orange",
+        summary: success ? currentConfig.successSummary : currentConfig.failSummary,
+        detail: success
+          ? `${currentConfig.successDetail}${currentMvpPlayer ? ` 이번 주 미션 MVP는 ${currentMvpPlayer.name}였어요.` : ""}`
+          : currentConfig.failDetail,
+      },
+      ...prev,
+    ]);
+    if (!success) {
+      setActionTokens(getDrawingTokensForWeek(currentWeek));
+      setWeekStatusMessage(`${currentWeek}주차 완성도가 부족해 행동권을 재충전했어요.`);
+      return;
+    }
+    setWeekResolved(true);
+    const rewardMeta = getDrawingMvpBadge(currentWeek);
+    setMvpReward({
+      week: currentWeek,
+      userId: currentMvpPlayer?.id ?? selectedPlayer.id,
+      userName: currentMvpPlayer?.name ?? selectedPlayer.name,
+      badge: rewardMeta.badge,
+      title: rewardMeta.title,
+    });
+    pushToast("이번 주 MVP 확정", `${currentMvpPlayer?.name ?? selectedPlayer.name}이(가) ${rewardMeta.title}를 받았어요.`, "violet");
+    if (currentWeek === 4) {
+      setSeasonComplete(true);
+      setProgressWeek(5);
+      setFinalCompletedByName(selectedPlayer.name);
+      setWeekStatusMessage("시즌 종료: 하나의 공동 그림이 완성됐어요.");
+      return;
+    }
+    window.setTimeout(() => moveToNextWeek((currentWeek + 1) as WeekNumber), 240);
+  };
+
+  const renderStudioPanel = (compact = false) => (
+    <div className={`rounded-3xl border border-violet-200 bg-white/90 shadow-sm ${compact ? "p-4" : "p-5"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-violet-500">Studio Palette</p>
+          <h3 className="mt-1 text-lg font-bold">캔버스 도구</h3>
+        </div>
+        <span className="rounded-full bg-violet-50 px-3 py-1 text-[11px] font-semibold text-violet-700">{toolLabel}</span>
+      </div>
+      <p className="mt-2 text-xs text-slate-500">
+        {currentWeek === 1
+          ? "1주차는 기획 단계라서 투표와 주제 선택이 먼저예요."
+          : currentWeek === 2
+          ? "2주차는 스케치 중심이라 차분한 색 팔레트로 제한돼요."
+          : currentWeek === 3
+          ? "3주차는 채색 중심 단계예요."
+          : "4주차는 스티커와 마지막 장식을 추가할 수 있어요."}
+      </p>
+      <div className="mt-4 space-y-4">
+        <div>
+          <p className="text-xs font-semibold text-slate-500">도구</p>
+          <div className={`mt-2 grid gap-2 ${compact ? "grid-cols-3" : "grid-cols-3"}`}>
+            {toolOptions.map((item) => {
+              const blocked =
+                currentWeek < item.minWeek ||
+                (item.id === "sticker" && currentWeek === 4 && currentStickerRemaining <= 0) ||
+                (item.id === "move" && (currentWeek !== 2 || !elementMoveUnlocked)) ||
+                (item.id === "bucket" && (currentWeek !== 3 || !colorBucketUnlocked));
+              const active = tool === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    if (blocked) return;
+                    playClick();
+                    setTool(item.id);
+                  }}
+                  disabled={blocked}
+                  className={`rounded-2xl border px-3 py-3 text-sm font-semibold transition ${
+                    active ? "border-violet-300 bg-violet-500 text-white" : "border-violet-200 bg-white text-violet-700 hover:bg-violet-50"
+                  } disabled:opacity-40`}
+                >
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+          {currentWeek === 2 && elementMoveUnlocked ? (
+            <p className="mt-2 text-[11px] leading-snug text-slate-500">
+              이동 도구: 캔버스의 선·도형 위를 <span className="font-semibold text-slate-700">길게 누른 뒤</span> 드래그하면 위치를 옮길 수 있어요.
+            </p>
+          ) : null}
+          {currentWeek === 3 && colorBucketUnlocked ? (
+            <p className="mt-2 text-[11px] leading-snug text-slate-500">
+              페인트통: 스케치·도형으로 <span className="font-semibold text-slate-700">닫힌 안쪽</span>을 누르면 그 영역만 팔레트 색으로 채워져요.
+            </p>
+          ) : null}
+        </div>
+        <div className={`grid gap-3 ${compact ? "grid-cols-1" : "grid-cols-[1.2fr_0.8fr]"}`}>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">색상</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {paletteColors.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setSelectedColor(color);
+                  }}
+                  disabled={currentWeek === 1}
+                  className={`h-10 w-10 rounded-full border-2 transition ${activeColor === color ? "scale-110 border-slate-900" : "border-white"}`}
+                  style={{ backgroundColor: color }}
+                  aria-label={`색상 ${color}`}
+                />
+              ))}
+            </div>
+            {currentWeek === 2 ? (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-slate-500">스케치 선 종류</p>
+                {sketchTextureUnlocked ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClick();
+                        setSketchStrokeStyle("solid");
+                      }}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                        sketchStrokeStyle === "solid"
+                          ? "border-violet-400 bg-violet-500 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      실선
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClick();
+                        setSketchStrokeStyle("texture");
+                      }}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                        sketchStrokeStyle === "texture"
+                          ? "border-amber-400 bg-amber-500 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                      title="점선 느낌의 텍스처 스케치"
+                    >
+                      텍스처 연필
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-2 text-[11px] text-slate-500">「스케치 연필 카드」로 텍스처 선을 해금할 수 있어요.</p>
+                )}
+              </div>
+            ) : null}
+            {currentWeek === 2 ? (
+              <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-2.5">
+                <p className="text-xs font-semibold text-slate-600">구도 가이드선</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-slate-600">{compositionGuideVisible ? "표시 중" : "꺼짐"}</span>
+                  {compositionGuideVisible ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClick();
+                        setCompositionGuideVisible(false);
+                        setWeekStatusMessage("구도 가이드선을 껐어요.");
+                      }}
+                      className="rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-100"
+                    >
+                      해제
+                    </button>
+                  ) : null}
+                </div>
+                <p className="mt-2 text-[10px] text-slate-500">「구도 프레임 카드」로 켜고 끌 수 있어요. 켠 뒤에는 여기서 바로 해제할 수도 있어요.</p>
+              </div>
+            ) : null}
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">두께</p>
+            {currentWeek === 4 ? (
+              <p className="mt-1 text-[10px] text-slate-500">4주차: 스티커 크기(작음 → 큼)에 반영돼요.</p>
+            ) : null}
+            <div className="mt-2 grid grid-cols-4 gap-2">
+              {[4, 8, 12, 18].map((size) => (
+                <button
+                  key={size}
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setSelectedSize(size);
+                  }}
+                  disabled={currentWeek === 1}
+                  className={`rounded-2xl border px-2 py-2 text-sm font-semibold ${
+                    selectedSize === size ? "border-amber-300 bg-amber-400 text-white" : "border-amber-200 bg-white text-amber-700"
+                  } disabled:opacity-40`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-slate-500">스티커</p>
+            <span className="text-[11px] text-rose-500">{currentWeek === 4 ? `남은 횟수 ${currentStickerRemaining}회` : "4주차부터 사용 가능"}</span>
+          </div>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {stickerPalette.map((sticker, stickerIndex) => (
+              <button
+                key={`${sticker}-${stickerIndex}`}
+                type="button"
+                onClick={() => {
+                  if (currentWeek < 4 || currentStickerRemaining <= 0) return;
+                  playClick();
+                  setSelectedSticker(sticker);
+                  setTool("sticker");
+                }}
+                disabled={currentWeek < 4 || currentStickerRemaining <= 0}
+                className={`rounded-2xl border bg-white py-3 text-2xl ${
+                  selectedSticker === sticker ? "border-rose-300 shadow-sm" : "border-rose-200"
+                } disabled:opacity-40`}
+              >
+                {sticker}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderPlanningPanel = (compact = false) => (
+    <div className={`rounded-3xl border border-emerald-200 bg-white/90 shadow-sm ${compact ? "p-4" : "p-5"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-emerald-500">Week 1 Planning</p>
+          <h3 className="mt-1 text-lg font-bold">배경 투표 + 주제 결정</h3>
+        </div>
+        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">{votesSubmitted}/5 투표</span>
+      </div>
+      <div className="mt-4 space-y-4">
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-800">1. 배경 투표</p>
+            <p className="text-[11px] text-slate-500">선택한 유저 기준</p>
+          </div>
+          <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : "grid-cols-3"}`}>
+            {DRAWING_THEME_VOTE_OPTIONS[1].map((themeId) => {
+              const voteThemeMeta = DRAWING_THEME_OPTIONS.find((theme) => theme.id === themeId) ?? DRAWING_THEME_OPTIONS[0];
+              const selectedVote = planningVotes[selectedPlayer.id] === themeId;
+              return (
+                <div key={themeId} className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xl">{voteThemeMeta.badge}</p>
+                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-emerald-700">{themeVoteCounts[themeId]}표</span>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold text-emerald-800">{voteThemeMeta.label}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleThemeVote(themeId, voteThemeMeta.label)}
+                      disabled={!canUseActions || currentWeek !== 1}
+                      className={`rounded-2xl border px-2 py-2 text-xs font-semibold ${
+                        selectedVote ? "border-emerald-300 bg-emerald-500 text-white" : "border-emerald-200 bg-white text-emerald-700"
+                      } disabled:opacity-40`}
+                    >
+                      투표
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyTheme(themeId, voteThemeMeta.label)}
+                      disabled={!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme}
+                      className="rounded-2xl border border-cyan-200 bg-white px-2 py-2 text-xs font-semibold text-cyan-700 disabled:opacity-40"
+                    >
+                      리더 반영
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-emerald-800">
+            현재 반영 배경: {themeMeta.badge} {themeMeta.label} / 최다 득표: {(DRAWING_THEME_OPTIONS.find((theme) => theme.id === winningThemeId) ?? themeMeta).label}
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-slate-800">2. 리더 주제 선택</p>
+            <span className="text-[11px] text-slate-500">{selectedPermission.canLeadTheme ? "리더 가능" : "리더 전용"}</span>
+          </div>
+          <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : "grid-cols-3"}`}>
+            {DRAWING_SUBJECT_OPTIONS.map((subject) => {
+              const active = selectedSubject === subject.id;
+              return (
+                <button
+                  key={subject.id}
+                  type="button"
+                  onClick={() => handleSelectSubject(subject.id, subject.label)}
+                  disabled={!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme}
+                  className={`rounded-2xl border p-3 text-left ${
+                    active ? "border-violet-300 bg-violet-500 text-white" : "border-violet-200 bg-white text-slate-700"
+                  } disabled:opacity-40`}
+                >
+                  <p className="text-xl">{subject.badge}</p>
+                  <p className="mt-2 text-sm font-semibold">{subject.label}</p>
+                  <p className={`mt-1 text-xs ${active ? "text-white/80" : "text-slate-500"}`}>{subject.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderMissionPanel = (compact = false) => (
+    <div className={`relative overflow-hidden rounded-3xl border shadow-sm ${missionBurst ? "border-fuchsia-400 bg-gradient-to-br from-yellow-100 via-fuchsia-100 to-cyan-100" : "border-violet-200 bg-white/90"} ${compact ? "p-4" : "p-5"}`}>
+      {!bonusChoicesUnlocked ? (
+        <button
+          type="button"
+          onClick={openSurpriseCard}
+          disabled={!surpriseCardVisible}
+          className={`flex w-full flex-col items-center justify-center rounded-[24px] border py-8 text-center ${
+            surpriseCardVisible ? "border-violet-300 bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg" : "border-violet-200 bg-violet-100/70 text-violet-400 opacity-70"
+          }`}
+        >
+          <span className="text-4xl">🃏</span>
+          <p className="mt-3 text-base font-black">서프라이즈 미션 카드</p>
+          <p className="mt-1 text-xs opacity-80">성공하면 추가 행동권으로 더 그릴 수 있어요.</p>
+        </button>
+      ) : null}
+      {bonusChoicesUnlocked && selectedMissionAttempts < 3 ? (
+        <div className="rounded-[24px] border border-violet-300 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-indigo-500 p-4 text-white shadow-xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-white/80">미션 카드</p>
+              <p className="mt-1 text-sm font-bold">{currentPrompt.text}</p>
+            </div>
+            <div className="rounded-full bg-white/15 px-3 py-1 text-[11px] font-semibold">{getMissionDifficultyLabel(missionDifficulty)} / {Math.max(0, 3 - selectedMissionAttempts)}회</div>
+          </div>
+          <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-3" : "sm:grid-cols-3"}`}>
+            {(["easy", "medium", "hard"] as MissionDifficulty[]).map((difficulty) => (
+              <button
+                key={difficulty}
+                type="button"
+                onClick={() => setMissionDifficulty(difficulty)}
+                className={`rounded-2xl border px-3 py-2 text-left text-xs ${
+                  missionDifficulty === difficulty ? "border-white bg-white text-violet-800" : "border-white/25 bg-white/10 text-white"
+                }`}
+              >
+                <p className="font-semibold">{getMissionDifficultyLabel(difficulty)}</p>
+                {!compact ? <p className="mt-1 truncate opacity-80">{getMissionPromptFromSet(DRAWING_MISSION_PROMPTS, currentWeek, difficulty, missionPromptCursor[difficulty]).text}</p> : null}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={startVoiceMission}
+              disabled={!canAttemptMission || missionListening || weekResolved || seasonComplete}
+              className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-violet-700 disabled:opacity-50"
+            >
+              {missionListening ? "듣는 중..." : "미션 시작"}
+            </button>
+            <div className="rounded-xl bg-white/15 px-3 py-2 text-[11px]">점수 {selectedMissionRecord?.totalScore ?? 0}</div>
+            <div className="rounded-xl bg-white/15 px-3 py-2 text-[11px]">정확도 {((latestMissionAccuracy ?? selectedMissionRecord?.lastAccuracy ?? 0) * 100).toFixed(0)}%</div>
+          </div>
+        </div>
+      ) : null}
+      {bonusChoicesUnlocked && selectedMissionAttempts >= 3 ? (
+        <div className="flex min-h-40 w-full flex-col items-center justify-center rounded-[24px] border border-slate-300 bg-gradient-to-br from-slate-100 to-slate-200 text-center text-slate-600 shadow-inner">
+          <span className="text-4xl">🃏</span>
+          <p className="mt-3 text-base font-black">미션 완료</p>
+          <p className="mt-1 text-xs">이번 주 카드 사용이 끝났어요.</p>
+        </div>
+      ) : null}
+      <div className="mt-3 rounded-2xl border border-violet-200 bg-violet-50/70 p-3 text-[11px] text-violet-900">
+        {missionMessage || "음성 미션에 도전해 MVP를 노려 보세요."}
+      </div>
+    </div>
+  );
+
+  const renderLeaderMessagePanel = (compact = false) => (
+    <div className={`min-w-0 overflow-hidden rounded-2xl border border-cyan-200 bg-cyan-50/70 ${compact ? "p-3" : "p-4"}`}>
+      <div className={`flex gap-2 ${compact ? "flex-col sm:flex-row sm:items-start sm:justify-between" : "items-start justify-between"}`}>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-cyan-700">응원 호출</p>
+          <p className={`mt-1 text-xs text-cyan-600 ${compact ? "line-clamp-2 sm:line-clamp-none" : ""}`}>
+            주도자는 특정 팀원에게 알림을 보내고 협력 그림 진행을 독려할 수 있어요.
+          </p>
+        </div>
+        <span className="shrink-0 self-start rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-cyan-700">
+          {selectedPermission.canLeadTheme ? "리더 가능" : "리더 전용"}
+        </span>
+      </div>
+      <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-stretch">
+        <select
+          value={leaderMessageTargetUserId}
+          onChange={(event) => setLeaderMessageTargetUserId(event.target.value)}
+          className="min-w-0 max-w-full rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
+          disabled={!selectedPermission.canLeadTheme}
+        >
+          {leaderMessageTargets.map((player) => (
+            <option key={player.id} value={player.id}>
+              {player.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={leaderMessage}
+          onChange={(event) => setLeaderMessage(event.target.value)}
+          className="min-w-0 max-w-full rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
+          disabled={!selectedPermission.canLeadTheme}
+        >
+          {DRAWING_LEADER_MESSAGES.map((message) => (
+            <option key={message} value={message}>
+              {message}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleLeaderMessage}
+          disabled={!selectedPermission.canLeadTheme || !canUseActions}
+          className="w-full shrink-0 rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+        >
+          응원 보내기
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderDrawingProgressPanels = () => (
+    <>
+      <div className="min-w-0 rounded-2xl border border-sky-200 bg-white/85 p-3 shadow-sm sm:p-4">
+        <div className="grid grid-cols-4 gap-1.5 text-center text-xs sm:gap-2 sm:text-sm">
+          <div className="rounded-2xl border border-sky-100 bg-sky-50 px-2 py-3">
+            <p className="text-[10px] text-slate-500">주차</p>
+            <p className="mt-1 font-semibold text-slate-800">{currentWeek}주차</p>
+          </div>
+          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-2 py-3">
+            <p className="text-[10px] text-slate-500">단계</p>
+            <p className="mt-1 truncate font-semibold text-slate-800">{currentConfig.phaseLabel}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-2 py-3">
+            <p className="text-[10px] text-slate-500">행동권</p>
+            <p className="mt-1 font-semibold text-emerald-600">{selectedTokens}</p>
+          </div>
+          <div className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50 px-2 py-3">
+            <p className="text-[10px] text-slate-500">MVP</p>
+            <p className="mt-1 font-semibold text-slate-800">{currentMvpPlayer?.name ?? "대기"}</p>
+          </div>
+        </div>
+        <div className="mt-4 space-y-2">
+          <GaugeBar label="기획 완성도" value={themeGauge} tone="bg-gradient-to-r from-cyan-300 to-sky-300" compact />
+          <GaugeBar label={currentWeek === 2 ? "스케치 완성도" : currentWeek === 3 ? "채색 완성도" : "드로잉 완성도"} value={drawGauge} tone="bg-gradient-to-r from-violet-300 to-fuchsia-300" compact />
+          <GaugeBar label="장식 완성도" value={stickerGauge} tone="bg-gradient-to-r from-amber-300 to-rose-300" compact />
+          <GaugeBar label={`${stageGaugeLabel} / 목표 ${currentConfig.threshold}%`} value={stageGauge} tone="bg-gradient-to-r from-cyan-300 via-violet-300 to-amber-300" />
+          <GaugeBar label="누적 완성도" value={totalCompletionGauge} tone="bg-gradient-to-r from-emerald-300 via-sky-300 to-fuchsia-300" compact />
+        </div>
+        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 text-[11px] text-slate-600">{weekStatusMessage}</div>
+        {currentWeek === 4 ? (
+          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-[11px] text-rose-700">
+            {selectedPlayer.name} 스티커 남은 횟수: {currentStickerRemaining}회
+          </div>
+        ) : null}
+      </div>
+      <div className="min-w-0 rounded-2xl border border-amber-200 bg-white/85 p-3 shadow-sm sm:p-4">
+        <p className="text-sm text-amber-500">Planning Snapshot</p>
+        <h4 className="mt-1 text-sm font-bold text-slate-900">현재 시즌 콘셉트</h4>
+        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
+            <p className="text-slate-500">반영 배경</p>
+            <p className="mt-1 font-semibold text-slate-800">
+              {themeMeta.badge} {themeMeta.label}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3">
+            <p className="text-slate-500">리더 주제</p>
+            <p className="mt-1 font-semibold text-slate-800">
+              {subjectMeta?.badge ?? "📝"} {subjectMeta?.label ?? "미정"}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3">
+            <p className="text-slate-500">최다 득표</p>
+            <p className="mt-1 font-semibold text-slate-800">{(DRAWING_THEME_OPTIONS.find((theme) => theme.id === winningThemeId) ?? themeMeta).label}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+            <p className="text-slate-500">현재 도구</p>
+            <p className="mt-1 font-semibold text-slate-800">{toolLabel}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <ToastStack notices={toastNotices} onDismiss={(id) => setToastNotices((prev) => prev.filter((item) => item.id !== id))} />
+      {topNotice ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/35 px-4">
+          <div className="w-full max-w-sm rounded-[28px] border border-cyan-200 bg-white p-5 shadow-2xl">
+            <p className="text-xs font-semibold text-cyan-700">응원 알림</p>
+            <p className="mt-2 text-lg font-bold text-slate-900">{topNotice.message}</p>
+            <p className="mt-2 text-sm text-slate-500">{topNotice.fromUserName}이(가) 보냈어요.</p>
+            <button
+              type="button"
+              onClick={() => setTeamNotices((prev) => prev.filter((notice) => notice.id !== topNotice.id))}
+              className="mt-4 w-full rounded-2xl bg-cyan-500 px-4 py-3 text-sm font-semibold text-white"
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      <section className="rounded-3xl border border-violet-200 bg-white/80 p-3 shadow-sm md:p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-black sm:text-lg md:text-xl">협력 게임</h2>
+            <p className="text-xs text-slate-500">공동 그림 그리기</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              playClick();
+              onBackToMenu();
+            }}
+            className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-2 text-sm text-violet-700 hover:bg-violet-100"
+          >
+            게임 선택으로
+          </button>
+        </div>
+      </section>
+
+      <section className="grid min-w-0 gap-4 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="order-1 min-w-0 rounded-3xl border border-violet-200 bg-white/80 p-4 shadow-sm sm:p-5">
+          <div className="relative pr-16">
+            <div>
+              <p className="text-sm text-violet-500">Canvas Progress</p>
+              <h3 className="mt-1 text-lg font-bold">
+                {currentConfig.title} {currentConfig.phaseLabel}
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">{currentConfig.mission}</p>
+            </div>
+            <button
+              type="button"
+              onClick={resetDrawingGame}
+              className="absolute right-0 top-0 rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-[11px] text-violet-700 hover:bg-violet-100"
+            >
+              초기화
+            </button>
+          </div>
+
+          <div className="mt-5 space-y-4">
+            <div className="rounded-3xl border border-violet-200 bg-white/90 p-3 shadow-sm">
+              <div
+                className={`relative aspect-[4/3] overflow-hidden rounded-[24px] border border-violet-100 ${
+                  currentWeek === 1 && !seasonComplete ? "bg-gradient-to-br from-white via-slate-50 to-white" : `bg-gradient-to-b ${themeMeta.className}`
+                }`}
+              >
+                {gradientOverlayLevel > 0 ? (
+                  <>
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        background: `linear-gradient(135deg, rgba(244,114,182,${Math.min(0.22 + gradientOverlayLevel * 0.08, 0.55)}) 0%, rgba(253,224,71,${Math.min(0.16 + gradientOverlayLevel * 0.06, 0.4)}) 32%, rgba(96,165,250,${Math.min(0.18 + gradientOverlayLevel * 0.08, 0.5)}) 68%, rgba(34,197,94,${Math.min(0.18 + gradientOverlayLevel * 0.06, 0.42)}) 100%)`,
+                        mixBlendMode: "multiply",
+                      }}
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-0"
+                      style={{
+                        background: `radial-gradient(circle at 22% 24%, rgba(255,255,255,${Math.min(0.16 + gradientOverlayLevel * 0.04, 0.28)}) 0%, transparent 28%), radial-gradient(circle at 78% 22%, rgba(255,255,255,${Math.min(0.14 + gradientOverlayLevel * 0.04, 0.24)}) 0%, transparent 24%)`,
+                      }}
+                    />
+                  </>
+                ) : null}
+                {currentWeek >= 2 || seasonComplete ? <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-blue-300/70 to-cyan-200/20" /> : null}
+                {currentWeek >= 2 || seasonComplete ? <div className="absolute left-1/2 bottom-6 h-16 w-60 -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-yellow-100/90 to-amber-300/90" /> : null}
+                <div className="absolute left-6 top-5 text-2xl opacity-85">{currentWeek === 1 ? "🧻" : themeMeta.badge}</div>
+                <div className="absolute right-6 top-5 text-xl opacity-70">{currentWeek <= 2 ? "✏️" : currentWeek === 3 ? "🎨" : "✨"}</div>
+
+                {currentWeek === 1 && !seasonComplete ? (
+                  <>
+                    <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.12)_1px,transparent_1px)] bg-[size:44px_44px]" />
+                    <div className="absolute left-8 top-16 rounded-2xl border border-slate-200 bg-white/90 px-4 py-3 shadow-sm">
+                      <p className="text-xs font-semibold text-slate-600">배경 투표</p>
+                      <p className="mt-1 text-sm font-bold text-slate-800">{votesSubmitted}/5명 참여</p>
+                    </div>
+                    <div className="absolute right-8 top-24 rounded-2xl border border-violet-200 bg-violet-50/90 px-4 py-3 shadow-sm">
+                      <p className="text-xs font-semibold text-violet-600">리더 주제</p>
+                      <p className="mt-1 text-sm font-bold text-violet-800">{subjectMeta?.label ?? "아직 미정"}</p>
+                    </div>
+                    <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center">
+                      <span className="text-5xl opacity-80">🖼️</span>
+                      <p className="mt-3 text-sm font-semibold text-slate-700">아직 비어 있는 팀 캔버스</p>
+                      <p className="mt-1 text-xs text-slate-500">1주차에는 투표와 주제 선택부터 시작해요.</p>
+                    </div>
+                  </>
+                ) : null}
+
+                {currentWeek === 2 ? (
+                  <>
+                    <div className="absolute left-[18%] top-[26%] text-4xl opacity-20">{subjectBadges[0]}</div>
+                    <div className="absolute right-[18%] top-[30%] text-4xl opacity-20">{subjectBadges[1]}</div>
+                    <div className="absolute left-1/2 bottom-[22%] -translate-x-1/2 text-5xl opacity-15">{subjectBadges[2]}</div>
+                    <div className="absolute inset-x-0 bottom-20 border-t border-dashed border-slate-500/25" />
+                  </>
+                ) : null}
+
+                {currentWeek === 3 ? (
+                  <>
+                    <div className="absolute left-[12%] top-[18%] h-20 w-20 rounded-full bg-white/20 blur-xl" />
+                    <div className="absolute right-[10%] top-[24%] h-24 w-24 rounded-full bg-pink-200/20 blur-xl" />
+                    <div className="absolute left-[26%] bottom-[20%] h-16 w-16 rounded-full bg-cyan-100/20 blur-xl" />
+                    {bonusPaletteColors.length > 0 ? (
+                      <div className="absolute right-6 bottom-6 flex flex-wrap gap-1 rounded-2xl bg-white/85 px-3 py-2 shadow-sm max-w-[9rem]">
+                        {bonusPaletteColors.map((color, index) => (
+                          <span key={`${color}-${index}`} className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: color }} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+
+                {currentWeek === 4 || seasonComplete ? (
+                  <>
+                    <div className="absolute left-10 top-16 text-2xl">{subjectBadges[0]}</div>
+                    <div className="absolute right-10 top-20 text-2xl">{subjectBadges[1]}</div>
+                    <div className="absolute left-1/2 top-12 -translate-x-1/2 text-2xl">✨</div>
+                    <div className="absolute left-[22%] bottom-16 text-2xl">⭐</div>
+                    <div className="absolute right-[24%] bottom-16 text-2xl">🌈</div>
+                  </>
+                ) : null}
+                {seasonComplete && finalCompletedByName ? (
+                  <div className="absolute bottom-4 right-4 rounded-full border border-violet-200 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-violet-800 shadow-sm">
+                    완료: {finalCompletedByName}
+                  </div>
+                ) : null}
+
+                <svg
+                  ref={svgRef}
+                  viewBox="0 0 1000 700"
+                  className={`absolute inset-0 h-full w-full touch-none ${
+                    movingElementId ? "cursor-grabbing" : tool === "move" ? "cursor-cell" : tool === "bucket" ? "cursor-crosshair" : ""
+                  }`}
+                  onPointerDown={handlePointerDown}
+                  onPointerMove={handlePointerMove}
+                  onPointerUp={finishPointer}
+                  onPointerLeave={finishPointer}
+                >
+                  <rect x="0" y="0" width="1000" height="700" fill="transparent" />
+                  {currentWeek === 2 && compositionGuideVisible ? (
+                    <g className="pointer-events-none" opacity={0.55}>
+                      <rect x="120" y="120" width="760" height="440" fill="none" stroke="#cbd5e1" strokeWidth={3} />
+                      <line x1="120" y1="260" x2="880" y2="260" stroke="#cbd5e1" strokeWidth={2} />
+                      <line x1="360" y1="120" x2="360" y2="560" stroke="#cbd5e1" strokeWidth={2} />
+                      <line x1="610" y1="120" x2="610" y2="560" stroke="#cbd5e1" strokeWidth={2} />
+                    </g>
+                  ) : null}
+                  {elements.filter((el) => el.kind === "bucketFill").map((element) => renderDrawingElement(element))}
+                  {elements.filter((el) => el.kind !== "bucketFill").map((element) => renderDrawingElement(element))}
+                  {previewDraft ? renderDrawingElement(previewDraft) : null}
+                </svg>
+                {sparkleFrameTheme && (currentWeek >= 2 || seasonComplete) ? (
+                  <div
+                    className="pointer-events-none absolute inset-0 z-20 rounded-[24px] border-[12px] border-solid"
+                    style={{
+                      borderColor: sparkleFrameTheme.border,
+                      boxShadow: `0 22px 55px ${sparkleFrameTheme.outerGlow}, inset 0 0 0 1px ${sparkleFrameTheme.insetLine}`,
+                    }}
+                    aria-hidden
+                  />
+                ) : null}
+              </div>
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{currentStageLabel}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    배경: {themeMeta.label} / 주제: {subjectMeta?.label ?? "미정"}
+                  </p>
+                </div>
+                {mvpReward ? <p className="rounded-full bg-yellow-50 px-3 py-1 text-[11px] font-semibold text-yellow-800">{mvpReward.badge} {mvpReward.userName}</p> : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2 text-[11px] text-slate-600 md:hidden">
+              <span className="font-semibold text-slate-800">
+                {currentWeek}주 {currentConfig.phaseLabel}
+              </span>
+              <span className="text-slate-400">·</span>
+              <span>행동 {selectedTokens}</span>
+              <span className="text-slate-400">·</span>
+              <span>
+                {stageGaugeLabel} {stageGauge}%
+              </span>
+            </div>
+
+            <div className="space-y-3 md:hidden">
+              {renderStudioPanel(true)}
+              {currentWeek === 1 ? renderPlanningPanel(true) : null}
+            </div>
+
+            <details className="group rounded-2xl border border-slate-200 bg-white/95 shadow-sm md:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">진행도 · 스냅샷 · 시즌 단계</p>
+                  <p className="mt-0.5 truncate text-[11px] text-slate-500">
+                    게이지 · Planning Snapshot · 1~4주 진행
+                  </p>
+                </div>
+                <span className="shrink-0 text-slate-400 transition group-open:rotate-180">▼</span>
+              </summary>
+              <div className="border-t border-slate-100 px-3 pb-3 pt-2">
+                <div className="grid min-w-0 gap-3">{renderDrawingProgressPanels()}</div>
+                <SeasonStepRow
+                  className="!mt-3 border-t border-slate-100 pt-3"
+                  currentWeek={currentWeek}
+                  progressWeek={progressWeek}
+                  seasonComplete={seasonComplete}
+                  labels={["기획", "스케치", "채색", "장식"]}
+                />
+              </div>
+            </details>
+
+            <div className="hidden min-w-0 gap-3 md:grid md:grid-cols-2">{renderDrawingProgressPanels()}</div>
+
+            <div className="hidden md:block">
+              <SeasonStepRow currentWeek={currentWeek} progressWeek={progressWeek} seasonComplete={seasonComplete} labels={["기획", "스케치", "채색", "장식"]} />
+            </div>
+
+            <details className="group rounded-2xl border border-violet-100 bg-violet-50/40 shadow-sm md:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-800">미션 · 보너스 · 응원 · 주차 완료</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">그림과 직접 관련 없는 협력/정리 항목은 여기 모았어요.</p>
+                </div>
+                <span className="shrink-0 text-slate-400 transition group-open:rotate-180">▼</span>
+              </summary>
+              <div className="space-y-4 border-t border-violet-100/80 px-3 pb-4 pt-3">
+                {renderMissionPanel(true)}
+                {bonusChoicesUnlocked ? (
+                  <div className="rounded-3xl border border-violet-200 bg-white/90 p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-slate-800">보너스 카드 행동</p>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {DRAWING_SURPRISE_OPTIONS[currentWeek].map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => handleBonusAction(option)}
+                          disabled={!canUseActions}
+                          className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-left text-xs disabled:opacity-40"
+                        >
+                          <p className="font-semibold text-violet-700">{option.label}</p>
+                          <p className="mt-1 text-violet-600">+{option.delta}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {renderLeaderMessagePanel(true)}
+                <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">주차 완료</p>
+                    <button type="button" onClick={() => setShowFinishInfo((prev) => !prev)} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold text-slate-600">
+                      완료 조건
+                    </button>
+                  </div>
+                  {showFinishInfo ? (
+                    <p className="mt-2 text-[11px] text-slate-500">
+                      이번 주 MVP: {currentMvpPlayer?.name ?? "아직 없음"} / {stageGaugeLabel}가 {currentConfig.threshold}% 이상이면 MVP만 완료할 수 있어요.
+                    </p>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={handleResolveWeek}
+                    disabled={!canResolveWeek}
+                    className="mt-3 w-full rounded-2xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {currentWeek}주차 완료하기 {currentMvpPlayer ? `(${currentMvpPlayer.name} 전용)` : ""}
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <div className="order-2 hidden min-w-0 rounded-3xl border border-violet-200 bg-white/80 p-4 shadow-sm md:block sm:p-5">
+          <div>
+            <p className="text-sm text-violet-500">Studio + Action</p>
+            <div className="mt-1 flex items-center justify-between gap-2">
+              <h3 className="text-lg font-bold sm:text-xl">{currentWeek}주차 작업 보드</h3>
+              <button type="button" onClick={() => setShowFinishInfo((prev) => !prev)} className="rounded-xl border border-violet-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-violet-700">완료 조건</button>
+            </div>
+            {showFinishInfo ? <p className="mt-2 text-[11px] text-slate-500">이번 주 MVP: {currentMvpPlayer?.name ?? "아직 없음"} / {stageGaugeLabel}가 {currentConfig.threshold}% 이상이면 MVP만 완료할 수 있어요.</p> : null}
+          </div>
+          <div className="mt-5 space-y-5">
+            {renderStudioPanel()}
+            {renderPlanningPanel()}
+            {renderMissionPanel()}
+            {bonusChoicesUnlocked ? (
+              <div className="rounded-3xl border border-violet-200 bg-white/90 p-5 shadow-sm">
+                <p className="text-sm text-violet-500">Bonus Action</p>
+                <h3 className="mt-1 text-lg font-bold">보너스 카드 행동</h3>
+                <div className="mt-4 grid grid-cols-3 gap-3">
+                  {DRAWING_SURPRISE_OPTIONS[currentWeek].map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleBonusAction(option)}
+                      disabled={!canUseActions}
+                      className="rounded-2xl border border-violet-200 bg-violet-50 p-3 text-left disabled:opacity-40"
+                    >
+                      <p className="text-sm font-semibold text-violet-700">{option.label}</p>
+                      <p className="mt-2 text-xs text-violet-600">보너스 +{option.delta}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {renderLeaderMessagePanel()}
+            <button
+              type="button"
+              onClick={handleResolveWeek}
+              disabled={!canResolveWeek}
+              className="w-full rounded-2xl bg-violet-500 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {currentWeek}주차 완료하기 {currentMvpPlayer ? `(${currentMvpPlayer.name} 전용)` : ""}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <MobileInfoTabs
+        activeSection={mobileInfoSection}
+        onChangeSection={setMobileInfoSection}
+        selectedUserId={selectedUserId}
+        onSelectUser={setSelectedUserId}
+        actionTokens={actionTokens}
+        players={players}
+        selectedPlayer={selectedPlayer}
+        selectedPermission={selectedPermission}
+        currentWeek={currentWeek}
+        selectedTokens={selectedTokens}
+        weekLogs={weekLogs}
+        contributionTitle="내 기여 모아보기"
+        contributionLogs={seasonComplete ? myFinalWeekLogs : myAllLogs.slice(0, 4)}
+        contributionEmptyText={
+          seasonComplete
+            ? `4주차에 내가 남긴 그림 작업이 아직 없어요. 마지막 주에는 ${mePlayer.name}를 선택해 마무리 기여를 남겨보세요.`
+            : `아직 내 그림 기록이 없어요. 랭킹에서 ${mePlayer.name}를 선택한 뒤 이번 주 그림을 남겨보세요.`
+        }
+        selectedMissionRecord={selectedMissionRecord}
+        isMvp={selectedPlayer.id === currentMvpUserId}
+        activeNotice={activeNotice}
+        mvpUserId={currentMvpUserId}
+        missionRecordsByUser={weekMissionRecords}
+        className="md:hidden"
+      />
+
+      <MobileInfoTabs
+        activeSection={mobileInfoSection}
+        onChangeSection={setMobileInfoSection}
+        selectedUserId={selectedUserId}
+        onSelectUser={setSelectedUserId}
+        actionTokens={actionTokens}
+        players={players}
+        selectedPlayer={selectedPlayer}
+        selectedPermission={selectedPermission}
+        currentWeek={currentWeek}
+        selectedTokens={selectedTokens}
+        weekLogs={weekLogs}
+        contributionTitle="내 기여 모아보기"
+        contributionLogs={seasonComplete ? myFinalWeekLogs : myAllLogs.slice(0, 4)}
+        contributionEmptyText={
+          seasonComplete
+            ? `4주차에 내가 남긴 그림 작업이 아직 없어요. 마지막 주에는 ${mePlayer.name}를 선택해 마무리 기여를 남겨보세요.`
+            : `아직 내 그림 기록이 없어요. 랭킹에서 ${mePlayer.name}를 선택한 뒤 이번 주 그림을 남겨보세요.`
+        }
+        selectedMissionRecord={selectedMissionRecord}
+        isMvp={selectedPlayer.id === currentMvpUserId}
+        activeNotice={activeNotice}
+        mvpUserId={currentMvpUserId}
+        missionRecordsByUser={weekMissionRecords}
+        className="hidden md:block lg:hidden"
+      />
+
+      <section className="hidden gap-4 lg:grid lg:grid-cols-[1.2fr_0.8fr]">
+        <RankingPanel
+          selectedUserId={selectedUserId}
+          onSelectUser={setSelectedUserId}
+          actionTokens={actionTokens}
+          players={players}
+          mvpUserId={currentMvpUserId}
+          missionRecordsByUser={weekMissionRecords}
+        />
+        <SelectedUserPanel
+          selectedPlayer={selectedPlayer}
+          selectedPermission={selectedPermission}
+          currentWeek={currentWeek}
+          selectedTokens={selectedTokens}
+          selectedMissionRecord={selectedMissionRecord}
+          isMvp={selectedPlayer.id === currentMvpUserId}
+          activeNotice={activeNotice}
+        />
+      </section>
+
+      <section className="hidden gap-4 xl:grid xl:grid-cols-[1.1fr_0.9fr]">
+        <LogsPanel title={`${currentWeek}주차 행동 기록`} subtitle="Week Action Trail" logs={weekLogs} />
+        <MyContributionPanel
+          title="내 기여 모아보기"
+          logs={seasonComplete ? myFinalWeekLogs : myAllLogs.slice(0, 4)}
+          emptyText={
+            seasonComplete
+              ? `4주차에 내가 남긴 그림 작업이 아직 없어요. 마지막 주에는 ${mePlayer.name}를 선택해 마무리 기여를 남겨보세요.`
+              : `아직 내 그림 기록이 없어요. 랭킹에서 ${mePlayer.name}를 선택한 뒤 이번 주 그림을 남겨보세요.`
+          }
+        />
+      </section>
+    </main>
+  );
+}
+
 export default function CoopGamePage() {
   const router = useRouter();
   const [mode, setMode] = useState<CoopMode>("menu");
@@ -4317,6 +6737,7 @@ export default function CoopGamePage() {
       {mode === "pet" && <PetCoopGame onBackToMenu={() => setMode("menu")} />}
       {mode === "island" && <IslandEscapeGame onBackToMenu={() => setMode("menu")} />}
       {mode === "cooking" && <CookingCoopGame onBackToMenu={() => setMode("menu")} />}
+      {mode === "drawing" && <DrawingCoopGame onBackToMenu={() => setMode("menu")} />}
     </div>
   );
 }
