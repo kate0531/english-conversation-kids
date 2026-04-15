@@ -8,6 +8,8 @@ import { playClick } from "@/lib/sounds";
 type WeekNumber = 1 | 2 | 3 | 4;
 type CoopMode = "menu" | "pet" | "island" | "cooking" | "drawing";
 type MobileInfoSection = "ranking" | "selected" | "logs" | "my";
+/** 공동 그림 모바일 하단 탭: 기존 4개 + 진행도·스냅/기획 */
+type DrawingMobileInfoSection = MobileInfoSection | "progress" | "snapshot";
 type MissionDifficulty = "easy" | "medium" | "hard";
 type PetMobileSheet = "actions" | "info" | null;
 type DrawingMobileSheet = "tools" | "info" | null;
@@ -959,9 +961,8 @@ const DRAWING_COLORS = ["#0f172a", "#2563eb", "#14b8a6", "#f97316", "#ef4444", "
 const DRAWING_STICKERS = ["⭐", "☀️", "☁️", "🌈", "🌴", "🐚", "🐠", "🦀"];
 const DRAWING_SURPRISE_OPTIONS: Record<WeekNumber, ActionOption[]> = {
   1: [
-    { id: "dr-card-1", label: "배경 번짐 카드", delta: 8, detail: "이번 주 배경 면적을 더 넓게 채울 수 있어요." },
-    { id: "dr-card-2", label: "컬러 참고 카드", delta: 7, detail: "배경 톤을 더 안정적으로 고를 수 있어요." },
-    { id: "dr-card-3", label: "구도 메모 카드", delta: 6, detail: "리더가 전체 구도를 잡기 쉬워졌어요." },
+    { id: "dr-card-2", label: "컬러 참고 카드", delta: 7, detail: "클릭 시 이번 기획에 맞는 팔레트 조합을 잠깐 띄워 봐요." },
+    { id: "dr-card-3", label: "구도 메모 카드", delta: 6, detail: "클릭 시 구도 가이드선이 잠깐 나타났다 사라져요." },
   ],
   2: [
     { id: "dr-card-4", label: "스케치 연필 카드", delta: 8, detail: "텍스처 연필 선 종류를 팔레트에 추가해요." },
@@ -1006,6 +1007,21 @@ const DRAWING_SUBJECT_OPTIONS: Array<{
   { id: "festival", label: "노을 축제", badge: "🎆", description: "노을과 조명, 음악이 있는 여름 축제" },
   { id: "sea", label: "바다 탐험", badge: "🐠", description: "바닷속 친구들과 배가 함께 있는 장면" },
 ];
+
+/** 1주차 컬러 참고 카드: 현재 배경·주제에 맞는 미리보기 팔레트 */
+function getPlanningPalettePeek(backgroundTheme: DrawingTheme, subject: DrawingSubject | null): string[] {
+  const byTheme: Record<DrawingTheme, [string, string, string, string, string]> = {
+    blue: ["#0369a1", "#0ea5e9", "#7dd3fc", "#bae6fd", "#fef9c3"],
+    sunset: ["#c2410c", "#fb7185", "#fdba74", "#fde047", "#4c0519"],
+    tropical: ["#047857", "#10b981", "#6ee7b7", "#fcd34d", "#0f766e"],
+  };
+  const colors = [...byTheme[backgroundTheme]];
+  if (subject === "playground") colors[4] = "#ec4899";
+  else if (subject === "festival") colors[4] = "#c026d3";
+  else if (subject === "sea") colors[2] = "#22d3ee";
+  return colors;
+}
+
 const DRAWING_LEADER_MESSAGES = [
   "원하는 배경에 투표해 주세요!",
   "배경 톤부터 같이 맞춰 보자!",
@@ -1918,6 +1934,7 @@ function SelectedUserPanel({
   selectedMissionRecord,
   isMvp = false,
   activeNotice = null,
+  footerSlot = null,
 }: {
   selectedPlayer: CoopPlayer;
   selectedPermission: PermissionProfile;
@@ -1926,6 +1943,8 @@ function SelectedUserPanel({
   selectedMissionRecord?: MissionRecord;
   isMvp?: boolean;
   activeNotice?: TeamNotice | null;
+  /** 권한 탭 하단 추가 블록 (예: 공동 그림 리더 전용 응원 호출) */
+  footerSlot?: ReactNode;
 }) {
   return (
     <div className="rounded-3xl border border-fuchsia-200 bg-white/85 p-4 space-y-3 shadow-sm">
@@ -1980,6 +1999,9 @@ function SelectedUserPanel({
             {activeNotice.fromUserName}: {activeNotice.message}
           </p>
         </div>
+      ) : null}
+      {footerSlot ? (
+        <div className="relative z-20 border-t border-fuchsia-100 pt-3 pointer-events-auto">{footerSlot}</div>
       ) : null}
     </div>
   );
@@ -2236,6 +2258,7 @@ function MobileInfoTabs({
   activeNotice = null,
   mvpUserId,
   missionRecordsByUser = {},
+  selectedUserFooter = null,
   className = "lg:hidden",
 }: {
   activeSection: MobileInfoSection;
@@ -2257,6 +2280,7 @@ function MobileInfoTabs({
   activeNotice?: TeamNotice | null;
   mvpUserId?: string | null;
   missionRecordsByUser?: Record<string, MissionRecord>;
+  selectedUserFooter?: ReactNode;
   className?: string;
 }) {
   const mobileTabs: Array<{ id: MobileInfoSection; label: string }> = [
@@ -2308,6 +2332,7 @@ function MobileInfoTabs({
           selectedMissionRecord={selectedMissionRecord}
           isMvp={isMvp}
           activeNotice={activeNotice}
+          footerSlot={selectedUserFooter}
         />
       ) : null}
       {activeSection === "logs" ? (
@@ -2320,6 +2345,127 @@ function MobileInfoTabs({
           emptyText={contributionEmptyText}
         />
       ) : null}
+    </section>
+  );
+}
+
+function DrawingMobileInfoTabs({
+  activeSection,
+  onChangeSection,
+  selectedUserId,
+  onSelectUser,
+  actionTokens,
+  players = MOCK_PLAYERS,
+  selectedPlayer,
+  selectedPermission,
+  currentWeek,
+  selectedTokens,
+  weekLogs,
+  contributionTitle,
+  contributionLogs,
+  contributionEmptyText,
+  selectedMissionRecord,
+  isMvp = false,
+  activeNotice = null,
+  mvpUserId,
+  missionRecordsByUser = {},
+  progressPanel,
+  snapshotPanel,
+  selectedUserFooter = null,
+  className = "lg:hidden",
+}: {
+  activeSection: DrawingMobileInfoSection;
+  onChangeSection: (section: DrawingMobileInfoSection) => void;
+  selectedUserId: string;
+  onSelectUser: (id: string) => void;
+  actionTokens: Record<string, number>;
+  players?: CoopPlayer[];
+  selectedPlayer: CoopPlayer;
+  selectedPermission: PermissionProfile;
+  currentWeek: WeekNumber;
+  selectedTokens: number;
+  weekLogs: SharedLog[];
+  contributionTitle: string;
+  contributionLogs: SharedLog[];
+  contributionEmptyText: string;
+  selectedMissionRecord?: MissionRecord;
+  isMvp?: boolean;
+  activeNotice?: TeamNotice | null;
+  mvpUserId?: string | null;
+  missionRecordsByUser?: Record<string, MissionRecord>;
+  /** 진행도(게이지·상태) */
+  progressPanel: ReactNode;
+  /** 스냅샷(시즌 스텝) + 기획 요약 */
+  snapshotPanel: ReactNode;
+  selectedUserFooter?: ReactNode;
+  className?: string;
+}) {
+  const mobileTabs: Array<{ id: DrawingMobileInfoSection; label: string }> = [
+    { id: "ranking", label: "랭킹" },
+    { id: "selected", label: "권한" },
+    { id: "logs", label: "기록" },
+    { id: "my", label: "내 기여" },
+    { id: "progress", label: "진행도" },
+    { id: "snapshot", label: "스냅·기획" },
+  ];
+
+  return (
+    <section className={`space-y-4 ${className}`}>
+      <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-slate-200 bg-white/85 p-2 shadow-sm sm:gap-2">
+        {mobileTabs.map((tab) => {
+          const active = tab.id === activeSection;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                playClick();
+                onChangeSection(tab.id);
+              }}
+              className={`rounded-xl px-2 py-2.5 text-[11px] font-semibold leading-tight transition sm:px-3 sm:text-xs ${
+                active ? "bg-sky-100 text-slate-900 shadow-sm" : "bg-slate-50 text-slate-600 hover:bg-sky-50"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activeSection === "ranking" ? (
+        <RankingPanel
+          selectedUserId={selectedUserId}
+          onSelectUser={onSelectUser}
+          actionTokens={actionTokens}
+          players={players}
+          mvpUserId={mvpUserId}
+          missionRecordsByUser={missionRecordsByUser}
+        />
+      ) : null}
+      {activeSection === "selected" ? (
+        <SelectedUserPanel
+          selectedPlayer={selectedPlayer}
+          selectedPermission={selectedPermission}
+          currentWeek={currentWeek}
+          selectedTokens={selectedTokens}
+          selectedMissionRecord={selectedMissionRecord}
+          isMvp={isMvp}
+          activeNotice={activeNotice}
+          footerSlot={selectedUserFooter}
+        />
+      ) : null}
+      {activeSection === "logs" ? (
+        <LogsPanel title={`${currentWeek}주차 행동 기록`} subtitle="Week Action Trail" logs={weekLogs} />
+      ) : null}
+      {activeSection === "my" ? (
+        <MyContributionPanel
+          title={contributionTitle}
+          logs={contributionLogs}
+          emptyText={contributionEmptyText}
+        />
+      ) : null}
+      {activeSection === "progress" ? progressPanel : null}
+      {activeSection === "snapshot" ? snapshotPanel : null}
     </section>
   );
 }
@@ -3193,33 +3339,62 @@ function CookingCoopGame({
   );
 }
 
+/** 협력 게임 홈: 4개 카드 미리보기를 그리드 열 너비와 무관하게 동일 비율·동일 크기로 */
+function CoopMenuPreviewShell({
+  outerBorderClass,
+  innerBorderClass,
+  children,
+}: {
+  outerBorderClass: string;
+  innerBorderClass: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`mt-2 flex h-[11rem] w-full min-h-[11rem] shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-white/70 ${outerBorderClass}`}
+    >
+      <div
+        className={`relative aspect-[4/3] w-[min(9.5rem,calc(100%-0.5rem))] flex-none overflow-hidden rounded-xl border shadow-sm ring-1 ring-slate-900/[0.06] ${innerBorderClass}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function CoopMenu({
   onSelect,
 }: {
   onSelect: (mode: Exclude<CoopMode, "menu">) => void;
 }) {
+  /** 무인도/요리 무대: 고정 뷰포트 안에서만 보이도록 축소·중앙 */
+  const menuStageWrap =
+    "pointer-events-none absolute left-1/2 top-1/2 w-[19rem] [transform:translate(-50%,-50%)_scale(0.5)] [&>div]:mt-0";
+
   return (
-    <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
-      <section className="grid gap-4 lg:grid-cols-4">
+    <main className="mx-auto max-w-4xl space-y-4 px-4 py-5">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <button
           type="button"
           onClick={() => {
             playClick();
             onSelect("pet");
           }}
-          className="rounded-3xl border border-emerald-300/30 bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 p-6 text-left hover:bg-emerald-500/25 transition"
+          className="rounded-2xl border border-emerald-300/30 bg-gradient-to-br from-emerald-500/20 to-cyan-500/10 p-3.5 text-left transition hover:bg-emerald-500/25"
         >
-          <h3 className="text-2xl font-black text-slate-800">애완동물 키우기</h3>
-          <p className="mt-2 text-sm text-slate-600">1주부터 4주까지 고양이를 키우며 성장과 진화를 완성해요.</p>
-          <div className="mt-5 min-h-[21rem] rounded-2xl border border-emerald-200/70 bg-white/60 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">샘플 동물</span>
-              <span className="text-sm font-semibold text-emerald-600">고양이</span>
-            </div>
-            <div className="mt-4 flex min-h-[16rem] items-center justify-center">
-              <CatFaceStage progressWeek={2} seasonComplete={false} />
-            </div>
+          <h3 className="text-lg font-black leading-tight text-slate-800">애완동물 키우기</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">1주부터 4주까지 고양이를 키우며 성장과 진화를 완성해요.</p>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+            <span>샘플</span>
+            <span className="font-semibold text-emerald-600">고양이</span>
           </div>
+          <CoopMenuPreviewShell outerBorderClass="border-emerald-200/80" innerBorderClass="border-emerald-200/75 bg-emerald-50/35">
+            <div className="absolute inset-0 flex items-center justify-center [&>div]:mt-0">
+              <div className="scale-[0.68]">
+                <CatFaceStage progressWeek={2} seasonComplete={false} />
+              </div>
+            </div>
+          </CoopMenuPreviewShell>
         </button>
 
         <button
@@ -3228,17 +3403,19 @@ function CoopMenu({
             playClick();
             onSelect("island");
           }}
-          className="rounded-3xl border border-sky-300/30 bg-gradient-to-br from-sky-500/20 to-amber-400/10 p-6 text-left hover:bg-sky-500/25 transition"
+          className="rounded-2xl border border-sky-300/30 bg-gradient-to-br from-sky-500/20 to-amber-400/10 p-3.5 text-left transition hover:bg-sky-500/25"
         >
-          <h3 className="text-2xl font-black text-slate-800">무인도 탈출</h3>
-          <p className="mt-2 text-sm text-slate-600">여름 무인도에서 생존, 자원 확보, 탈출 준비, 탈출까지 이어지는 협력 게임이에요.</p>
-          <div className="mt-5 rounded-2xl border border-sky-200/70 bg-white/60 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">샘플 계절</span>
-              <span className="text-sm font-semibold text-sky-600">여름</span>
-            </div>
-            <IslandSceneStage progressWeek={3} seasonComplete={false} />
+          <h3 className="text-lg font-black leading-tight text-slate-800">무인도 탈출</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">여름 무인도에서 생존·자원·탈출까지 이어지는 협력 게임이에요.</p>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+            <span>샘플</span>
+            <span className="font-semibold text-sky-600">여름</span>
           </div>
+          <CoopMenuPreviewShell outerBorderClass="border-sky-200/80" innerBorderClass="border-sky-200/70 bg-sky-50/20">
+            <div className={menuStageWrap} aria-hidden>
+              <IslandSceneStage progressWeek={3} seasonComplete={false} />
+            </div>
+          </CoopMenuPreviewShell>
         </button>
 
         <button
@@ -3247,19 +3424,19 @@ function CoopMenu({
             playClick();
             onSelect("cooking");
           }}
-          className="rounded-3xl border border-rose-300/30 bg-gradient-to-br from-rose-500/20 to-amber-400/10 p-6 text-left hover:bg-rose-500/25 transition"
+          className="rounded-2xl border border-rose-300/30 bg-gradient-to-br from-rose-500/20 to-amber-400/10 p-3.5 text-left transition hover:bg-rose-500/25"
         >
-          <h3 className="text-2xl font-black text-slate-800">요리하기</h3>
-          <p className="mt-2 text-sm text-slate-600">메인 쉐프와 도우미가 함께 재료부터 포장까지 피자를 완성하는 협력 게임이에요.</p>
-          <div className="mt-5 rounded-2xl border border-rose-200/70 bg-white/60 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">샘플 메뉴</span>
-              <span className="text-sm font-semibold text-rose-600">피자</span>
-            </div>
-            <div className="mt-4 flex items-center justify-center">
+          <h3 className="text-lg font-black leading-tight text-slate-800">요리하기</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">메인 쉐프와 도우미가 재료부터 포장까지 피자를 완성해요.</p>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+            <span>샘플</span>
+            <span className="font-semibold text-rose-600">피자</span>
+          </div>
+          <CoopMenuPreviewShell outerBorderClass="border-rose-200/80" innerBorderClass="border-rose-200/70 bg-rose-50/25">
+            <div className={menuStageWrap} aria-hidden>
               <PizzaCookingStage progressWeek={3} seasonComplete={false} />
             </div>
-          </div>
+          </CoopMenuPreviewShell>
         </button>
 
         <button
@@ -3268,28 +3445,26 @@ function CoopMenu({
             playClick();
             onSelect("drawing");
           }}
-          className="rounded-3xl border border-violet-300/30 bg-gradient-to-br from-violet-500/20 to-sky-400/10 p-6 text-left hover:bg-violet-500/25 transition"
+          className="rounded-2xl border border-violet-300/30 bg-gradient-to-br from-violet-500/20 to-sky-400/10 p-3.5 text-left transition hover:bg-violet-500/25"
         >
-          <h3 className="text-2xl font-black text-slate-800">공동 그림 그리기</h3>
-          <p className="mt-2 text-sm text-slate-600">하나의 주제로 1주부터 4주까지 함께 그림을 완성하는 협력 게임이에요.</p>
-          <div className="mt-5 rounded-2xl border border-violet-200/70 bg-white/60 p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-500">샘플 주제</span>
-              <span className="text-sm font-semibold text-violet-600">여름 바닷가</span>
-            </div>
-            <div className="mt-4 flex min-h-[16rem] items-center justify-center">
-              <div className="relative h-44 w-full max-w-[14rem] overflow-hidden rounded-[2rem] border border-violet-200 bg-gradient-to-b from-sky-100 via-cyan-50 to-amber-50">
-                <div className="absolute left-1/2 top-6 -translate-x-1/2 text-3xl">☀️</div>
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-blue-300/80 to-cyan-200/40" />
-                <div className="absolute left-1/2 bottom-6 h-14 w-40 -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-yellow-100 to-amber-300" />
-                <div className="absolute left-5 bottom-11 text-3xl">🌴</div>
-                <div className="absolute right-5 bottom-10 text-3xl">🌈</div>
-                <div className="absolute left-1/2 top-[4.9rem] -translate-x-1/2 text-3xl">🎨</div>
-                <div className="absolute left-[28%] top-[4.2rem] text-xl text-violet-500">〰️</div>
-                <div className="absolute right-[20%] top-[5.2rem] text-xl text-rose-400">⭐</div>
-              </div>
-            </div>
+          <h3 className="text-lg font-black leading-tight text-slate-800">공동 그림 그리기</h3>
+          <p className="mt-1 line-clamp-2 text-xs leading-snug text-slate-600">하나의 주제로 1주~4주 함께 그림을 완성하는 협력 게임이에요.</p>
+          <div className="mt-2 flex items-center justify-between text-[11px] text-slate-500">
+            <span>샘플</span>
+            <span className="font-semibold text-violet-600">여름 바닷가</span>
           </div>
+          <CoopMenuPreviewShell outerBorderClass="border-violet-200/80" innerBorderClass="border-violet-200/85 bg-gradient-to-b from-sky-100 via-cyan-50 to-amber-50">
+            <div className="relative h-full w-full">
+              <div className="absolute left-1/2 top-[10%] -translate-x-1/2 text-3xl">☀️</div>
+              <div className="absolute inset-x-0 bottom-0 h-[28%] bg-gradient-to-t from-blue-300/85 to-cyan-200/45" />
+              <div className="absolute left-1/2 bottom-[14%] h-[22%] w-[52%] -translate-x-1/2 rounded-[50%] bg-gradient-to-b from-yellow-100 to-amber-300" />
+              <div className="absolute bottom-[18%] left-[10%] text-3xl">🌴</div>
+              <div className="absolute bottom-[16%] right-[10%] text-3xl">🌈</div>
+              <div className="absolute left-1/2 top-[38%] -translate-x-1/2 text-3xl">🎨</div>
+              <div className="absolute left-[26%] top-[34%] text-xl text-violet-500">〰️</div>
+              <div className="absolute right-[18%] top-[40%] text-xl text-rose-400">⭐</div>
+            </div>
+          </CoopMenuPreviewShell>
         </button>
       </section>
     </main>
@@ -4950,7 +5125,6 @@ function DrawingCoopGame({
   const lastMovePointerRef = useRef<DrawingPoint | null>(null);
   const [players, setPlayers] = useState<CoopPlayer[]>(() => sortPlayersByPoints(MOCK_PLAYERS));
   const [selectedUserId, setSelectedUserId] = useState("p3");
-  const [mobileInfoSection, setMobileInfoSection] = useState<MobileInfoSection>("selected");
   const [currentWeek, setCurrentWeek] = useState<WeekNumber>(1);
   const [progressWeek, setProgressWeek] = useState(1);
   const [seasonComplete, setSeasonComplete] = useState(false);
@@ -4974,6 +5148,10 @@ function DrawingCoopGame({
   const [movingElementId, setMovingElementId] = useState<string | null>(null);
   const [colorBucketUnlocked, setColorBucketUnlocked] = useState(false);
   const [gradientOverlayLevel, setGradientOverlayLevel] = useState(0);
+  /** 1주차 컬러 참고 카드: 팔레트 미리보기 팝업 */
+  const [planningPalettePopup, setPlanningPalettePopup] = useState<string[] | null>(null);
+  /** 1주차 구도 메모 카드: 캔버스에 가이드선 플래시 */
+  const [planningCompositionFlash, setPlanningCompositionFlash] = useState(false);
   const [themeGauge, setThemeGauge] = useState(0);
   const [drawGauge, setDrawGauge] = useState(0);
   const [stickerGauge, setStickerGauge] = useState(0);
@@ -5009,6 +5187,7 @@ function DrawingCoopGame({
   const [missionBurst, setMissionBurst] = useState(false);
   /** 모바일: 기획·캔버스 도구 패널 바텀시트 */
   const [mobileDrawingToolsPopupOpen, setMobileDrawingToolsPopupOpen] = useState(false);
+  const [drawingMobileInfoSection, setDrawingMobileInfoSection] = useState<DrawingMobileInfoSection>("selected");
 
   const mePlayer = useMemo(() => players.find((player) => player.isMe) ?? players[2] ?? players[0], [players]);
   const selectedPlayer = useMemo(() => players.find((player) => player.id === selectedUserId) ?? players[0], [players, selectedUserId]);
@@ -5062,7 +5241,24 @@ function DrawingCoopGame({
   const currentPrompt = getMissionPromptFromSet(DRAWING_MISSION_PROMPTS, currentWeek, missionDifficulty, missionPromptCursor[missionDifficulty]);
   const activeNotice = useMemo(() => teamNotices.find((notice) => notice.week === currentWeek && notice.toUserId === selectedPlayer.id) ?? null, [currentWeek, selectedPlayer.id, teamNotices]);
   const topNotice = useMemo(() => teamNotices.find((notice) => notice.week === currentWeek && notice.toUserId === selectedPlayer.id) ?? null, [currentWeek, selectedPlayer.id, teamNotices]);
-  const leaderMessageTargets = useMemo(() => players.filter((player) => player.id !== selectedPlayer.id), [players, selectedPlayer.id]);
+  /** 권한 탭에서 보고 있는 학생 기준: 본인 제외한 팀원만 응원 대상 (무인도 응원 호출과 동일) */
+  const leaderMessageTargets = useMemo(
+    () => players.filter((player) => player.id !== selectedPlayer.id),
+    [players, selectedPlayer.id]
+  );
+  const leaderCheerCanAct = !weekResolved && !seasonComplete && (actionTokens[selectedPlayer.id] ?? 0) > 0;
+  useEffect(() => {
+    const targets = players.filter((player) => player.id !== selectedPlayer.id);
+    setLeaderMessageTargetUserId((prev) => {
+      if (targets.some((player) => player.id === prev)) return prev;
+      return targets[0]?.id ?? prev;
+    });
+  }, [players, selectedPlayer.id]);
+  useEffect(() => {
+    if (!planningPalettePopup) return;
+    const t = window.setTimeout(() => setPlanningPalettePopup(null), 2400);
+    return () => window.clearTimeout(t);
+  }, [planningPalettePopup]);
   const currentMvpUserId = useMemo(() => {
     const entries = Object.entries(weekMissionRecords);
     if (entries.length === 0) return null;
@@ -5087,7 +5283,6 @@ function DrawingCoopGame({
     sparkleFrameStyleIndex >= 0
       ? SPARKLE_FINISH_FRAME_THEMES[sparkleFrameStyleIndex % SPARKLE_FINISH_FRAME_THEMES.length]
       : null;
-  const topPlayer = useMemo(() => players[0] ?? null, [players]);
   useEffect(() => {
     if (currentWeek < 4 && drawingStudioMobileTab === "sticker") setDrawingStudioMobileTab("tools");
   }, [currentWeek, drawingStudioMobileTab]);
@@ -5161,6 +5356,18 @@ function DrawingCoopGame({
     setActionsTakenThisWeek((prev) => prev + 1);
   };
 
+  const spendActionAs = (actorId: string, pointGain: number) => {
+    if (actionsTakenThisWeek === 0) revealSurpriseCard();
+    setActionTokens((prev) => ({
+      ...prev,
+      [actorId]: Math.max(0, (prev[actorId] ?? 0) - 1),
+    }));
+    setPlayers((prev) =>
+      sortPlayersByPoints(prev.map((player) => (player.id === actorId ? { ...player, points: player.points + pointGain } : player)))
+    );
+    setActionsTakenThisWeek((prev) => prev + 1);
+  };
+
   const grantExtraDrawTokens = (userId: string) => {
     setActionTokens((prev) => ({ ...prev, [userId]: (prev[userId] ?? 0) + 3 }));
   };
@@ -5170,7 +5377,7 @@ function DrawingCoopGame({
     playClick();
     setPlayers(sortPlayersByPoints(MOCK_PLAYERS));
     setSelectedUserId("p3");
-    setMobileInfoSection("selected");
+    setDrawingMobileInfoSection("selected");
     setCurrentWeek(1);
     setProgressWeek(1);
     setSeasonComplete(false);
@@ -5228,6 +5435,8 @@ function DrawingCoopGame({
     setMissionPromptCursor({ easy: 0, medium: 0, hard: 0 });
     setShowFinishInfo(false);
     setMissionBurst(false);
+    setPlanningPalettePopup(null);
+    setPlanningCompositionFlash(false);
   };
 
   const handleThemeVote = (themeId: DrawingTheme, label: string) => {
@@ -5547,6 +5756,8 @@ function DrawingCoopGame({
     setElementMoveUnlocked(false);
     setCompositionGuideVisible(false);
     setColorBucketUnlocked(false);
+    setPlanningPalettePopup(null);
+    setPlanningCompositionFlash(false);
     setMovingElementId(null);
     moveTargetIdRef.current = null;
     lastMovePointerRef.current = null;
@@ -5673,7 +5884,15 @@ function DrawingCoopGame({
 
   const handleLeaderMessage = () => {
     const targetPlayer = players.find((player) => player.id === leaderMessageTargetUserId);
-    if (!targetPlayer || targetPlayer.id === selectedPlayer.id || !selectedPermission.canLeadTheme || !canUseActions) return;
+    if (!targetPlayer || targetPlayer.id === selectedPlayer.id) return;
+    if (!selectedPermission.canLeadTheme) {
+      pushToast("응원 호출", "랭킹 1위(리더)만 응원을 보낼 수 있어요.", "orange");
+      return;
+    }
+    if (!leaderCheerCanAct) {
+      pushToast("응원 호출", `${selectedPlayer.name}님의 행동권이 있을 때만 보낼 수 있어요.`, "orange");
+      return;
+    }
     playClick();
     const notice: TeamNotice = {
       id: `drawing-cheer-${Date.now()}`,
@@ -5688,8 +5907,19 @@ function DrawingCoopGame({
     setTeamNotices((prev) => [notice, ...prev.filter((item) => !(item.week === currentWeek && item.toUserId === targetPlayer.id))]);
     setActionTokens((prev) => ({ ...prev, [targetPlayer.id]: (prev[targetPlayer.id] ?? 0) + 1 }));
     setSelectedUserId(targetPlayer.id);
-    appendLog("violet", `${targetPlayer.name}에게 응원을 보냈어요.`, leaderMessage);
-    spendAction(2);
+    setActionLogs((prev) => [
+      {
+        id: `drawing-log-${Date.now()}-${prev.length}`,
+        week: currentWeek,
+        userId: selectedPlayer.id,
+        userName: selectedPlayer.name,
+        tone: "violet",
+        summary: `${targetPlayer.name}에게 응원을 보냈어요.`,
+        detail: leaderMessage,
+      },
+      ...prev,
+    ]);
+    spendActionAs(selectedPlayer.id, 2);
     pushToast("응원 알림 전송", `${targetPlayer.name}에게 "${leaderMessage}" 알림을 보냈어요.`, "cyan");
   };
 
@@ -5697,6 +5927,12 @@ function DrawingCoopGame({
     if (!canUseActions || !bonusChoicesUnlocked) return;
     playClick();
     if (currentWeek === 1) {
+      if (option.id === "dr-card-2") {
+        setPlanningPalettePopup(getPlanningPalettePeek(backgroundTheme, selectedSubject));
+      } else if (option.id === "dr-card-3") {
+        setPlanningCompositionFlash(true);
+        window.setTimeout(() => setPlanningCompositionFlash(false), 2800);
+      }
       setThemeGauge((prev) => clampGauge(prev + option.delta));
     } else if (currentWeek === 4) {
       if (option.id !== "dr-card-12") {
@@ -5733,8 +5969,8 @@ function DrawingCoopGame({
 
     if (currentWeek === 2 && option.id === "dr-card-4") {
       setSketchTextureUnlocked(true);
-      setWeekStatusMessage("스케치 연필 카드로 '텍스처 연필' 선을 팔레트에서 선택할 수 있어요.");
-      pushToast("연필 카드", "2주차 도구에서 실선 / 텍스처 연필을 고를 수 있어요.", "violet");
+      setWeekStatusMessage("보너스 카드로 스페셜 스케치 선을 쓸 수 있어요.");
+      pushToast("연필 카드", "2주차 도구에서 일반 / 스페셜을 고를 수 있어요.", "violet");
     } else     if (currentWeek === 2 && option.id === "dr-card-5") {
       setElementMoveUnlocked(true);
       setTool("move");
@@ -5772,6 +6008,12 @@ function DrawingCoopGame({
       if (option.id !== "dr-card-12" && option.id !== "dr-card-11") {
         setWeekStatusMessage("장식 보너스로 이번 주 작업량이 늘어났어요.");
       }
+    } else if (currentWeek === 1 && (option.id === "dr-card-2" || option.id === "dr-card-3")) {
+      setWeekStatusMessage(
+        option.id === "dr-card-2"
+          ? "컬러 참고: 이번 기획에 맞는 팔레트 조합을 잠깐 확인했어요."
+          : "구도 메모: 가이드선이 잠깐 나타났다 사라졌어요."
+      );
     } else {
       setWeekStatusMessage("보너스 카드 효과로 이번 주 작업량이 늘어났어요.");
     }
@@ -5972,48 +6214,60 @@ function DrawingCoopGame({
               {currentWeek === 2 ? (
                 <div className="mt-3">
                   <p className="text-xs font-semibold text-slate-500">스케치 선 종류</p>
-                  {sketchTextureUnlocked ? (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playClick();
-                          setSketchStrokeStyle("solid");
-                        }}
-                        className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
-                          sketchStrokeStyle === "solid"
-                            ? "border-violet-400 bg-violet-500 text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        실선
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          playClick();
-                          setSketchStrokeStyle("texture");
-                        }}
-                        className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
-                          sketchStrokeStyle === "texture"
-                            ? "border-amber-400 bg-amber-500 text-white"
-                            : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                        title="점선 느낌의 텍스처 스케치"
-                      >
-                        텍스처 연필
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] text-slate-500">「스케치 연필 카드」로 텍스처 선을 해금할 수 있어요.</p>
-                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playClick();
+                        setSketchStrokeStyle("solid");
+                      }}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                        sketchStrokeStyle === "solid"
+                          ? "border-violet-400 bg-violet-500 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      일반
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!sketchTextureUnlocked) return;
+                        playClick();
+                        setSketchStrokeStyle("texture");
+                      }}
+                      disabled={!sketchTextureUnlocked}
+                      className={`rounded-2xl border px-3 py-2 text-xs font-semibold transition ${
+                        sketchStrokeStyle === "texture"
+                          ? "border-amber-400 bg-amber-500 text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      } disabled:cursor-not-allowed disabled:opacity-45`}
+                      title={sketchTextureUnlocked ? "스페셜 스케치" : undefined}
+                    >
+                      스페셜
+                    </button>
+                  </div>
+                  {!sketchTextureUnlocked ? (
+                    <p className="mt-2 text-[11px] text-slate-500">보너스 카드에서 추가하세요.</p>
+                  ) : null}
                 </div>
               ) : null}
               {currentWeek === 2 ? (
                 <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50/90 px-3 py-2.5">
                   <p className="text-xs font-semibold text-slate-600">구도 가이드선</p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-slate-600">{compositionGuideVisible ? "표시 중" : "꺼짐"}</span>
+                    <div className="inline-flex overflow-hidden rounded-xl border border-slate-200 bg-white text-[11px] font-bold">
+                      <span
+                        className={`px-3 py-1.5 ${!compositionGuideVisible ? "bg-slate-700 text-white" : "text-slate-500"}`}
+                      >
+                        OFF
+                      </span>
+                      <span
+                        className={`px-3 py-1.5 ${compositionGuideVisible ? "bg-emerald-500 text-white" : "text-slate-500"}`}
+                      >
+                        ON
+                      </span>
+                    </div>
                     {compositionGuideVisible ? (
                       <button
                         type="button"
@@ -6024,11 +6278,13 @@ function DrawingCoopGame({
                         }}
                         className="rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-800 hover:bg-slate-100"
                       >
-                        해제
+                        끄기
                       </button>
                     ) : null}
                   </div>
-                  <p className="mt-2 text-[10px] text-slate-500">「구도 프레임 카드」로 켜고 끌 수 있어요. 켠 뒤에는 여기서 바로 해제할 수도 있어요.</p>
+                  {!compositionGuideVisible ? (
+                    <p className="mt-2 text-[11px] text-slate-500">보너스 카드에서 추가하세요.</p>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -6091,79 +6347,81 @@ function DrawingCoopGame({
   );
 
   const renderPlanningPanel = (compact = false) => (
-    <div className={`rounded-3xl border border-emerald-200 bg-white/90 shadow-sm ${compact ? "p-4" : "p-5"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-emerald-500">1주차 기획</p>
-          <h3 className="mt-1 text-lg font-bold">배경 투표 · 주제</h3>
+    <div className={`rounded-3xl border border-emerald-200 bg-white/90 shadow-sm ${compact ? "p-3" : "p-5"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={`${compact ? "text-[11px]" : "text-sm"} text-emerald-500`}>1주차 기획</p>
+          <h3 className={`mt-0.5 font-bold ${compact ? "text-sm leading-snug" : "text-lg"}`}>배경 투표 · 주제</h3>
         </div>
-        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold text-emerald-700">{votesSubmitted}/5</span>
+        <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">{votesSubmitted}/5</span>
       </div>
-      {!selectedPermission.canLeadTheme && topPlayer ? (
-        <div className="mt-3 flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50/90 px-3 py-2.5 text-[11px] leading-snug text-amber-950">
-          <p>리더 반영·주제는 1위만 가능해요.</p>
-          <button
-            type="button"
-            onClick={() => {
-              playClick();
-              setSelectedUserId(topPlayer.id);
-            }}
-            className="min-h-[44px] self-start rounded-xl border border-amber-300 bg-white px-3 py-2 text-xs font-semibold text-amber-900 touch-manipulation"
-          >
-            1위 {topPlayer.name}(으)로 전환
-          </button>
-        </div>
-      ) : null}
-      <div className="mt-4 space-y-4">
+      <div className={`${compact ? "mt-2 space-y-3" : "mt-4 space-y-4"}`}>
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-slate-800">배경 투표</p>
-            <p className="text-[11px] text-slate-500">선택 유저 기준</p>
+          <div className="flex flex-wrap items-center justify-between gap-1">
+            <p className={`font-semibold text-slate-800 ${compact ? "text-xs" : "text-sm"}`}>배경 투표</p>
+            <p className="text-[10px] text-slate-500">선택 유저 기준</p>
           </div>
-          <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : "grid-cols-3"}`}>
+          <div className={`mt-2 grid gap-1.5 ${compact ? "grid-cols-3" : "grid-cols-3"}`}>
             {DRAWING_THEME_VOTE_OPTIONS[1].map((themeId) => {
               const voteThemeMeta = DRAWING_THEME_OPTIONS.find((theme) => theme.id === themeId) ?? DRAWING_THEME_OPTIONS[0];
               const selectedVote = planningVotes[selectedPlayer.id] === themeId;
+              const applied = backgroundTheme === themeId;
               return (
-                <div key={themeId} className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-emerald-900">{voteThemeMeta.label}</p>
-                    <span className="shrink-0 rounded-full bg-white px-2 py-1 text-[10px] font-semibold text-emerald-700">{themeVoteCounts[themeId]}표</span>
+                <div
+                  key={themeId}
+                  className={`rounded-xl border border-emerald-200/90 bg-emerald-50/80 ${compact ? "p-1.5" : "p-2.5"}`}
+                >
+                  <div className="flex items-center justify-between gap-0.5">
+                    <p className={`font-semibold leading-tight text-emerald-900 ${compact ? "text-[10px]" : "text-xs"}`}>{voteThemeMeta.label}</p>
+                    <span className="shrink-0 rounded bg-white/90 px-1 py-0.5 text-[9px] font-semibold text-emerald-700">{themeVoteCounts[themeId]}표</span>
                   </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleThemeVote(themeId, voteThemeMeta.label)}
+                    disabled={!canUseActions || currentWeek !== 1}
+                    className={`mt-1.5 w-full touch-manipulation rounded-lg border px-1 py-1.5 text-[10px] font-semibold ${
+                      selectedVote ? "border-emerald-400 bg-emerald-500 text-white" : "border-emerald-200 bg-white text-emerald-800"
+                    } disabled:opacity-40`}
+                  >
+                    투표
+                  </button>
+                  {selectedPermission.canLeadTheme ? (
                     <button
                       type="button"
-                      onClick={() => handleThemeVote(themeId, voteThemeMeta.label)}
-                      disabled={!canUseActions || currentWeek !== 1}
-                      className={`min-h-[44px] touch-manipulation rounded-2xl border px-2 py-2 text-xs font-semibold ${
-                        selectedVote ? "border-emerald-300 bg-emerald-500 text-white" : "border-emerald-200 bg-white text-emerald-700"
+                      onClick={() => {
+                        if (!canUseActions || currentWeek !== 1 || applied) return;
+                        handleApplyTheme(themeId, voteThemeMeta.label);
+                      }}
+                      disabled={!canUseActions || currentWeek !== 1 || applied}
+                      className={`mt-1.5 flex w-full items-center justify-center gap-1 rounded-lg border px-1 py-1 text-[9px] font-medium touch-manipulation ${
+                        applied ? "border-cyan-400 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                       } disabled:opacity-40`}
                     >
-                      투표
+                      <span
+                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border text-[8px] leading-none ${
+                          applied ? "border-cyan-500 bg-cyan-500 text-white" : "border-slate-300 bg-white"
+                        }`}
+                        aria-hidden
+                      >
+                        {applied ? "✓" : ""}
+                      </span>
+                      반영
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleApplyTheme(themeId, voteThemeMeta.label)}
-                      disabled={!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme}
-                      className="min-h-[44px] touch-manipulation rounded-2xl border border-cyan-200 bg-white px-2 py-2 text-xs font-semibold text-cyan-700 disabled:opacity-40"
-                    >
-                      리더 반영
-                    </button>
-                  </div>
+                  ) : null}
                 </div>
               );
             })}
           </div>
-          <div className="mt-3 rounded-2xl border border-dashed border-emerald-200 bg-emerald-50/70 p-3 text-[11px] text-emerald-800">
+          <p className="mt-2 text-[10px] leading-snug text-emerald-800/90">
             반영: {themeMeta.label} · 최다: {(DRAWING_THEME_OPTIONS.find((theme) => theme.id === winningThemeId) ?? themeMeta).label}
-          </div>
+          </p>
         </div>
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-slate-800">리더 주제</p>
-            <span className="text-[11px] text-slate-500">{selectedPermission.canLeadTheme ? "가능" : "1위만"}</span>
+          <div className="flex items-center justify-between gap-2">
+            <p className={`font-semibold text-slate-800 ${compact ? "text-xs" : "text-sm"}`}>주제</p>
+            <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[9px] font-semibold text-violet-700">리더만</span>
           </div>
-          <div className={`mt-3 grid gap-2 ${compact ? "grid-cols-1" : "grid-cols-3"}`}>
+          <div className={`mt-2 grid gap-1.5 ${compact ? "grid-cols-1" : "grid-cols-3"}`}>
             {DRAWING_SUBJECT_OPTIONS.map((subject) => {
               const active = selectedSubject === subject.id;
               return (
@@ -6172,12 +6430,12 @@ function DrawingCoopGame({
                   type="button"
                   onClick={() => handleSelectSubject(subject.id, subject.label)}
                   disabled={!canUseActions || currentWeek !== 1 || !selectedPermission.canLeadTheme}
-                  className={`min-h-[44px] touch-manipulation rounded-2xl border p-3 text-left ${
-                    active ? "border-violet-300 bg-violet-500 text-white" : "border-violet-200 bg-white text-slate-700"
-                  } disabled:opacity-40`}
+                  className={`touch-manipulation rounded-xl border p-2 text-left ${
+                    compact ? "min-h-0" : "min-h-[44px] p-3"
+                  } ${active ? "border-violet-400 bg-violet-500 text-white" : "border-violet-200 bg-white text-slate-700"} disabled:opacity-40`}
                 >
-                  <p className="text-sm font-semibold">{subject.label}</p>
-                  <p className={`mt-1 line-clamp-2 text-xs ${active ? "text-white/85" : "text-slate-500"}`}>{subject.description}</p>
+                  <p className={`font-semibold ${compact ? "text-xs" : "text-sm"}`}>{subject.label}</p>
+                  <p className={`mt-0.5 line-clamp-2 ${compact ? "text-[10px]" : "text-xs"} ${active ? "text-white/85" : "text-slate-500"}`}>{subject.description}</p>
                 </button>
               );
             })}
@@ -6255,24 +6513,26 @@ function DrawingCoopGame({
   );
 
   const renderLeaderMessagePanel = (compact = false) => (
-    <div className={`min-w-0 overflow-hidden rounded-2xl border border-cyan-200 bg-cyan-50/70 ${compact ? "p-3" : "p-4"}`}>
+    <div
+      className={`relative z-10 min-w-0 rounded-2xl border border-cyan-200 bg-cyan-50/70 pointer-events-auto ${compact ? "p-3" : "p-4"}`}
+    >
       <div className={`flex gap-2 ${compact ? "flex-col sm:flex-row sm:items-start sm:justify-between" : "items-start justify-between"}`}>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-cyan-700">응원 호출</p>
           <p className={`mt-1 text-xs text-cyan-600 ${compact ? "line-clamp-2 sm:line-clamp-none" : ""}`}>
-            주도자는 특정 팀원에게 알림을 보내고 협력 그림 진행을 독려할 수 있어요.
+            리더만 특정 팀원에게 알림을 보내고 협력 그림 진행을 독려할 수 있어요.
           </p>
         </div>
-        <span className="shrink-0 self-start rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-cyan-700">
-          {selectedPermission.canLeadTheme ? "리더 가능" : "리더 전용"}
-        </span>
+        <span className="shrink-0 self-start rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-cyan-700">리더 전용</span>
       </div>
       <div className="mt-3 grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_auto] sm:items-stretch">
         <select
           value={leaderMessageTargetUserId}
-          onChange={(event) => setLeaderMessageTargetUserId(event.target.value)}
-          className="min-w-0 max-w-full rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
-          disabled={!selectedPermission.canLeadTheme}
+          onChange={(event) => {
+            playClick();
+            setLeaderMessageTargetUserId(event.target.value);
+          }}
+          className="min-w-0 max-w-full touch-manipulation rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
         >
           {leaderMessageTargets.map((player) => (
             <option key={player.id} value={player.id}>
@@ -6282,9 +6542,11 @@ function DrawingCoopGame({
         </select>
         <select
           value={leaderMessage}
-          onChange={(event) => setLeaderMessage(event.target.value)}
-          className="min-w-0 max-w-full rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
-          disabled={!selectedPermission.canLeadTheme}
+          onChange={(event) => {
+            playClick();
+            setLeaderMessage(event.target.value);
+          }}
+          className="min-w-0 max-w-full touch-manipulation rounded-2xl border border-cyan-200 bg-white px-3 py-2 text-sm text-slate-700"
         >
           {DRAWING_LEADER_MESSAGES.map((message) => (
             <option key={message} value={message}>
@@ -6295,8 +6557,7 @@ function DrawingCoopGame({
         <button
           type="button"
           onClick={handleLeaderMessage}
-          disabled={!selectedPermission.canLeadTheme || !canUseActions}
-          className="w-full shrink-0 rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+          className="w-full shrink-0 touch-manipulation rounded-2xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-white shadow-sm active:opacity-90 sm:w-auto"
         >
           응원 보내기
         </button>
@@ -6304,63 +6565,71 @@ function DrawingCoopGame({
     </div>
   );
 
+  const renderDrawingProgressGaugeCard = () => (
+    <div className="min-w-0 rounded-2xl border border-sky-200 bg-white/85 p-3 shadow-sm sm:p-4">
+      <div className="grid grid-cols-4 gap-1.5 text-center text-xs sm:gap-2 sm:text-sm">
+        <div className="rounded-2xl border border-sky-100 bg-sky-50 px-2 py-3">
+          <p className="text-[10px] text-slate-500">주차</p>
+          <p className="mt-1 font-semibold text-slate-800">{currentWeek}주차</p>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-2 py-3">
+          <p className="text-[10px] text-slate-500">단계</p>
+          <p className="mt-1 truncate font-semibold text-slate-800">{currentConfig.phaseLabel}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-2 py-3">
+          <p className="text-[10px] text-slate-500">행동권</p>
+          <p className="mt-1 font-semibold text-emerald-600">{selectedTokens}</p>
+        </div>
+        <div className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50 px-2 py-3">
+          <p className="text-[10px] text-slate-500">MVP</p>
+          <p className="mt-1 font-semibold text-slate-800">{currentMvpPlayer?.name ?? "대기"}</p>
+        </div>
+      </div>
+      <div className="mt-4 space-y-2">
+        <GaugeBar label="기획 완성도" value={themeGauge} tone="bg-gradient-to-r from-cyan-300 to-sky-300" compact />
+        <GaugeBar label={currentWeek === 2 ? "스케치 완성도" : currentWeek === 3 ? "채색 완성도" : "드로잉 완성도"} value={drawGauge} tone="bg-gradient-to-r from-violet-300 to-fuchsia-300" compact />
+        <GaugeBar label="장식 완성도" value={stickerGauge} tone="bg-gradient-to-r from-amber-300 to-rose-300" compact />
+        <GaugeBar label={`${stageGaugeLabel} / 목표 ${currentConfig.threshold}%`} value={stageGauge} tone="bg-gradient-to-r from-cyan-300 via-violet-300 to-amber-300" />
+        <GaugeBar label="누적 완성도" value={totalCompletionGauge} tone="bg-gradient-to-r from-emerald-300 via-sky-300 to-fuchsia-300" compact />
+      </div>
+      <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 text-[11px] text-slate-600">{weekStatusMessage}</div>
+      {currentWeek === 4 ? (
+        <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-[11px] text-rose-700">
+          {selectedPlayer.name} 스티커 남은 횟수: {currentStickerRemaining}회
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderDrawingPlanningSummaryCard = () => (
+    <div className="min-w-0 rounded-2xl border border-amber-200 bg-white/85 p-3 shadow-sm sm:p-4">
+      <p className="text-sm text-amber-500">기획 요약</p>
+      <h4 className="mt-1 text-sm font-bold text-slate-900">배경 · 주제</h4>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
+          <p className="text-slate-500">반영 배경</p>
+          <p className="mt-1 font-semibold text-slate-800">{themeMeta.label}</p>
+        </div>
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3">
+          <p className="text-slate-500">리더 주제</p>
+          <p className="mt-1 font-semibold text-slate-800">{subjectMeta?.label ?? "미정"}</p>
+        </div>
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3">
+          <p className="text-slate-500">최다 득표</p>
+          <p className="mt-1 font-semibold text-slate-800">{(DRAWING_THEME_OPTIONS.find((theme) => theme.id === winningThemeId) ?? themeMeta).label}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
+          <p className="text-slate-500">현재 도구</p>
+          <p className="mt-1 font-semibold text-slate-800">{toolLabel}</p>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderDrawingProgressPanels = () => (
     <>
-      <div className="min-w-0 rounded-2xl border border-sky-200 bg-white/85 p-3 shadow-sm sm:p-4">
-        <div className="grid grid-cols-4 gap-1.5 text-center text-xs sm:gap-2 sm:text-sm">
-          <div className="rounded-2xl border border-sky-100 bg-sky-50 px-2 py-3">
-            <p className="text-[10px] text-slate-500">주차</p>
-            <p className="mt-1 font-semibold text-slate-800">{currentWeek}주차</p>
-          </div>
-          <div className="rounded-2xl border border-amber-100 bg-amber-50 px-2 py-3">
-            <p className="text-[10px] text-slate-500">단계</p>
-            <p className="mt-1 truncate font-semibold text-slate-800">{currentConfig.phaseLabel}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-2 py-3">
-            <p className="text-[10px] text-slate-500">행동권</p>
-            <p className="mt-1 font-semibold text-emerald-600">{selectedTokens}</p>
-          </div>
-          <div className="rounded-2xl border border-fuchsia-100 bg-fuchsia-50 px-2 py-3">
-            <p className="text-[10px] text-slate-500">MVP</p>
-            <p className="mt-1 font-semibold text-slate-800">{currentMvpPlayer?.name ?? "대기"}</p>
-          </div>
-        </div>
-        <div className="mt-4 space-y-2">
-          <GaugeBar label="기획 완성도" value={themeGauge} tone="bg-gradient-to-r from-cyan-300 to-sky-300" compact />
-          <GaugeBar label={currentWeek === 2 ? "스케치 완성도" : currentWeek === 3 ? "채색 완성도" : "드로잉 완성도"} value={drawGauge} tone="bg-gradient-to-r from-violet-300 to-fuchsia-300" compact />
-          <GaugeBar label="장식 완성도" value={stickerGauge} tone="bg-gradient-to-r from-amber-300 to-rose-300" compact />
-          <GaugeBar label={`${stageGaugeLabel} / 목표 ${currentConfig.threshold}%`} value={stageGauge} tone="bg-gradient-to-r from-cyan-300 via-violet-300 to-amber-300" />
-          <GaugeBar label="누적 완성도" value={totalCompletionGauge} tone="bg-gradient-to-r from-emerald-300 via-sky-300 to-fuchsia-300" compact />
-        </div>
-        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 text-[11px] text-slate-600">{weekStatusMessage}</div>
-        {currentWeek === 4 ? (
-          <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50/80 p-3 text-[11px] text-rose-700">
-            {selectedPlayer.name} 스티커 남은 횟수: {currentStickerRemaining}회
-          </div>
-        ) : null}
-      </div>
-      <div className="min-w-0 rounded-2xl border border-amber-200 bg-white/85 p-3 shadow-sm sm:p-4">
-        <p className="text-sm text-amber-500">기획 요약</p>
-        <h4 className="mt-1 text-sm font-bold text-slate-900">배경 · 주제</h4>
-        <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3">
-            <p className="text-slate-500">반영 배경</p>
-            <p className="mt-1 font-semibold text-slate-800">{themeMeta.label}</p>
-          </div>
-          <div className="rounded-2xl border border-violet-200 bg-violet-50 px-3 py-3">
-            <p className="text-slate-500">리더 주제</p>
-            <p className="mt-1 font-semibold text-slate-800">{subjectMeta?.label ?? "미정"}</p>
-          </div>
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-3 py-3">
-            <p className="text-slate-500">최다 득표</p>
-            <p className="mt-1 font-semibold text-slate-800">{(DRAWING_THEME_OPTIONS.find((theme) => theme.id === winningThemeId) ?? themeMeta).label}</p>
-          </div>
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-3">
-            <p className="text-slate-500">현재 도구</p>
-            <p className="mt-1 font-semibold text-slate-800">{toolLabel}</p>
-          </div>
-        </div>
-      </div>
+      {renderDrawingProgressGaugeCard()}
+      {renderDrawingPlanningSummaryCard()}
     </>
   );
 
@@ -6380,6 +6649,32 @@ function DrawingCoopGame({
             >
               닫기
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {planningPalettePopup ? (
+        <div className="pointer-events-none fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/35 px-4">
+          <div
+            className="w-full max-w-sm rounded-[28px] border border-violet-200 bg-white p-5 shadow-2xl"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="text-xs font-semibold text-violet-600">컬러 참고</p>
+            <p className="mt-1 text-sm font-bold text-slate-900">
+              {themeMeta.label} · {subjectMeta?.label ?? "주제 미정"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">이번 기획에 어울리는 팔레트 조합이에요.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {planningPalettePopup.map((hex) => (
+                <div
+                  key={hex}
+                  className="h-11 w-11 rounded-xl border-2 border-white shadow-md ring-1 ring-slate-200/80"
+                  style={{ backgroundColor: hex }}
+                  title={hex}
+                />
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
@@ -6482,13 +6777,6 @@ function DrawingCoopGame({
                     <div className="absolute left-[12%] top-[18%] h-20 w-20 rounded-full bg-white/20 blur-xl" />
                     <div className="absolute right-[10%] top-[24%] h-24 w-24 rounded-full bg-pink-200/20 blur-xl" />
                     <div className="absolute left-[26%] bottom-[20%] h-16 w-16 rounded-full bg-cyan-100/20 blur-xl" />
-                    {bonusPaletteColors.length > 0 ? (
-                      <div className="absolute right-6 bottom-6 flex flex-wrap gap-1 rounded-2xl bg-white/85 px-3 py-2 shadow-sm max-w-[9rem]">
-                        {bonusPaletteColors.map((color, index) => (
-                          <span key={`${color}-${index}`} className="h-4 w-4 rounded-full border border-white" style={{ backgroundColor: color }} />
-                        ))}
-                      </div>
-                    ) : null}
                   </>
                 ) : null}
 
@@ -6519,12 +6807,14 @@ function DrawingCoopGame({
                   onPointerLeave={finishPointer}
                 >
                   <rect x="0" y="0" width="1000" height="700" fill="transparent" />
-                  {currentWeek === 2 && compositionGuideVisible ? (
-                    <g className="pointer-events-none" opacity={0.55}>
-                      <rect x="120" y="120" width="760" height="440" fill="none" stroke="#cbd5e1" strokeWidth={3} />
-                      <line x1="120" y1="260" x2="880" y2="260" stroke="#cbd5e1" strokeWidth={2} />
-                      <line x1="360" y1="120" x2="360" y2="560" stroke="#cbd5e1" strokeWidth={2} />
-                      <line x1="610" y1="120" x2="610" y2="560" stroke="#cbd5e1" strokeWidth={2} />
+                  {(currentWeek === 2 && compositionGuideVisible) || (currentWeek === 1 && planningCompositionFlash) ? (
+                    <g
+                      className={`pointer-events-none ${currentWeek === 1 && planningCompositionFlash ? "opacity-90" : "opacity-55"}`}
+                    >
+                      <rect x="120" y="120" width="760" height="440" fill="none" stroke="#94a3b8" strokeWidth={3} strokeDasharray="10 8" />
+                      <line x1="120" y1="260" x2="880" y2="260" stroke="#94a3b8" strokeWidth={2} strokeDasharray="8 6" />
+                      <line x1="360" y1="120" x2="360" y2="560" stroke="#94a3b8" strokeWidth={2} strokeDasharray="8 6" />
+                      <line x1="610" y1="120" x2="610" y2="560" stroke="#94a3b8" strokeWidth={2} strokeDasharray="8 6" />
                     </g>
                   ) : null}
                   {elements.filter((el) => el.kind === "bucketFill").map((element) => renderDrawingElement(element))}
@@ -6567,17 +6857,32 @@ function DrawingCoopGame({
               </span>
             </div>
 
-            <div className="md:hidden">
+            <div className={`grid gap-2 md:hidden ${currentWeek >= 2 ? "grid-cols-2" : "grid-cols-1"}`}>
               <button
                 type="button"
                 onClick={() => {
                   playClick();
                   setMobileDrawingToolsPopupOpen(true);
                 }}
-                className="flex w-full min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm font-semibold text-violet-800 shadow-sm"
+                className="flex min-h-[48px] touch-manipulation items-center justify-center gap-1.5 rounded-2xl border border-emerald-300 bg-gradient-to-br from-emerald-400 to-teal-500 px-3 py-3 text-sm font-bold text-white shadow-md"
               >
-                기획 · 캔버스 도구
+                <span aria-hidden>📋</span>
+                기획
               </button>
+              {currentWeek >= 2 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    playClick();
+                    setDrawingStudioMobileTab("tools");
+                    setMobileDrawingToolsPopupOpen(true);
+                  }}
+                  className="flex min-h-[48px] touch-manipulation items-center justify-center gap-1.5 rounded-2xl border border-violet-300 bg-gradient-to-br from-violet-500 to-fuchsia-600 px-3 py-3 text-sm font-bold text-white shadow-md"
+                >
+                  <span aria-hidden>🎨</span>
+                  캔버스 도구
+                </button>
+              ) : null}
             </div>
 
             {mobileDrawingToolsPopupOpen ? (
@@ -6596,7 +6901,7 @@ function DrawingCoopGame({
                     <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-200" aria-hidden />
                     <div className="flex items-center justify-between gap-2">
                       <p id="drawing-tools-sheet-title" className="text-sm font-semibold text-slate-800">
-                        기획 · 캔버스 도구
+                        {currentWeek >= 2 ? "기획 · 캔버스 도구" : "1주차 기획"}
                       </p>
                       <button
                         type="button"
@@ -6612,7 +6917,17 @@ function DrawingCoopGame({
                   </div>
                   <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
                     {currentWeek === 1 ? renderPlanningPanel(true) : null}
-                    {renderStudioPanel(true, true)}
+                    {currentWeek >= 2 ? (
+                      <>
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50/50 p-2">
+                          <p className="text-[11px] font-semibold text-amber-800">기획 요약</p>
+                          <p className="mt-1 text-[10px] text-amber-900/90">
+                            배경 {themeMeta.label} · 주제 {subjectMeta?.label ?? "미정"}
+                          </p>
+                        </div>
+                        {renderStudioPanel(true, true)}
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -6639,7 +6954,6 @@ function DrawingCoopGame({
                   </div>
                 </div>
               ) : null}
-              {renderLeaderMessagePanel(true)}
               <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-semibold text-slate-800">주차 완료</p>
@@ -6663,18 +6977,6 @@ function DrawingCoopGame({
               </div>
             </div>
 
-            <div className="space-y-3 md:hidden">
-              <p className="text-xs font-semibold text-slate-500">진행도 · 스냅샷</p>
-              <div className="grid min-w-0 gap-3">{renderDrawingProgressPanels()}</div>
-              <SeasonStepRow
-                className="border-t border-slate-100 pt-3"
-                currentWeek={currentWeek}
-                progressWeek={progressWeek}
-                seasonComplete={seasonComplete}
-                labels={["기획", "스케치", "채색", "장식"]}
-              />
-            </div>
-
             <div className="hidden min-w-0 gap-3 md:grid md:grid-cols-2">{renderDrawingProgressPanels()}</div>
 
             <div className="hidden md:block">
@@ -6693,14 +6995,16 @@ function DrawingCoopGame({
             {showFinishInfo ? <p className="mt-2 text-[11px] text-slate-500">이번 주 MVP: {currentMvpPlayer?.name ?? "아직 없음"} / {stageGaugeLabel}가 {currentConfig.threshold}% 이상이면 MVP만 완료할 수 있어요.</p> : null}
           </div>
           <div className="mt-5 space-y-5">
-            {renderStudioPanel()}
+            {currentWeek >= 2 ? renderStudioPanel() : null}
             {currentWeek === 1 ? renderPlanningPanel() : null}
             {renderMissionPanel()}
             {bonusChoicesUnlocked ? (
               <div className="rounded-3xl border border-violet-200 bg-white/90 p-5 shadow-sm">
                 <p className="text-sm text-violet-500">Bonus Action</p>
                 <h3 className="mt-1 text-lg font-bold">보너스 카드 행동</h3>
-                <div className="mt-4 grid grid-cols-3 gap-3">
+                <div
+                  className={`mt-4 grid gap-3 ${DRAWING_SURPRISE_OPTIONS[currentWeek].length <= 2 ? "grid-cols-2" : "grid-cols-3"}`}
+                >
                   {DRAWING_SURPRISE_OPTIONS[currentWeek].map((option) => (
                     <button
                       key={option.id}
@@ -6716,7 +7020,6 @@ function DrawingCoopGame({
                 </div>
               </div>
             ) : null}
-            {renderLeaderMessagePanel()}
             <button
               type="button"
               onClick={handleResolveWeek}
@@ -6729,9 +7032,9 @@ function DrawingCoopGame({
         </div>
       </section>
 
-      <MobileInfoTabs
-        activeSection={mobileInfoSection}
-        onChangeSection={setMobileInfoSection}
+      <DrawingMobileInfoTabs
+        activeSection={drawingMobileInfoSection}
+        onChangeSection={setDrawingMobileInfoSection}
         selectedUserId={selectedUserId}
         onSelectUser={setSelectedUserId}
         actionTokens={actionTokens}
@@ -6753,12 +7056,26 @@ function DrawingCoopGame({
         activeNotice={activeNotice}
         mvpUserId={currentMvpUserId}
         missionRecordsByUser={weekMissionRecords}
+        progressPanel={<div className="space-y-2">{renderDrawingProgressGaugeCard()}</div>}
+        snapshotPanel={
+          <div className="space-y-3">
+            <SeasonStepRow
+              className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
+              currentWeek={currentWeek}
+              progressWeek={progressWeek}
+              seasonComplete={seasonComplete}
+              labels={["기획", "스케치", "채색", "장식"]}
+            />
+            {renderDrawingPlanningSummaryCard()}
+          </div>
+        }
+        selectedUserFooter={renderLeaderMessagePanel(true)}
         className="md:hidden"
       />
 
-      <MobileInfoTabs
-        activeSection={mobileInfoSection}
-        onChangeSection={setMobileInfoSection}
+      <DrawingMobileInfoTabs
+        activeSection={drawingMobileInfoSection}
+        onChangeSection={setDrawingMobileInfoSection}
         selectedUserId={selectedUserId}
         onSelectUser={setSelectedUserId}
         actionTokens={actionTokens}
@@ -6780,6 +7097,20 @@ function DrawingCoopGame({
         activeNotice={activeNotice}
         mvpUserId={currentMvpUserId}
         missionRecordsByUser={weekMissionRecords}
+        progressPanel={<div className="space-y-2">{renderDrawingProgressGaugeCard()}</div>}
+        snapshotPanel={
+          <div className="space-y-3">
+            <SeasonStepRow
+              className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-sm"
+              currentWeek={currentWeek}
+              progressWeek={progressWeek}
+              seasonComplete={seasonComplete}
+              labels={["기획", "스케치", "채색", "장식"]}
+            />
+            {renderDrawingPlanningSummaryCard()}
+          </div>
+        }
+        selectedUserFooter={renderLeaderMessagePanel(true)}
         className="hidden md:block lg:hidden"
       />
 
@@ -6800,6 +7131,7 @@ function DrawingCoopGame({
           selectedMissionRecord={selectedMissionRecord}
           isMvp={selectedPlayer.id === currentMvpUserId}
           activeNotice={activeNotice}
+          footerSlot={renderLeaderMessagePanel()}
         />
       </section>
 
