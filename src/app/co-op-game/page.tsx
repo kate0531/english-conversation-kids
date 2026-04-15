@@ -207,7 +207,7 @@ interface ToastNotice {
   id: string;
   title: string;
   body: string;
-  tone: "cyan" | "violet" | "emerald";
+  tone: "cyan" | "violet" | "emerald" | "orange";
 }
 
 interface MvpRewardState {
@@ -2115,6 +2115,7 @@ function ToastStack({
     cyan: "border-cyan-200 bg-cyan-50 text-cyan-900",
     violet: "border-violet-200 bg-violet-50 text-violet-900",
     emerald: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    orange: "border-orange-200 bg-orange-50 text-orange-900",
   };
 
   return (
