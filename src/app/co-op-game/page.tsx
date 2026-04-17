@@ -7155,6 +7155,15 @@ function DrawingCoopGame({
 export default function CoopGamePage() {
   const router = useRouter();
   const [mode, setMode] = useState<CoopMode>("menu");
+  const [showEntryGuide, setShowEntryGuide] = useState(false);
+
+  useEffect(() => {
+    if (mode === "menu") {
+      setShowEntryGuide(false);
+      return;
+    }
+    setShowEntryGuide(true);
+  }, [mode]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-sky-100 via-emerald-50 to-amber-50 text-slate-900">
@@ -7173,6 +7182,39 @@ export default function CoopGamePage() {
           </div>
         </div>
       </header>
+
+      {showEntryGuide ? (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/55 px-4 backdrop-blur-[2px]">
+          <div className="relative w-full max-w-xl rounded-[28px] border border-violet-300 bg-gradient-to-b from-white to-violet-50 p-6 shadow-[0_30px_90px_rgba(15,23,42,0.45)] sm:p-7">
+            <h2 className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">목표는 하나!</h2>
+            <p className="mt-3 text-sm font-semibold text-slate-800">팀원들과 협력해서 4주 안에 미션을 완성하세요.</p>
+            <p className="mt-1 text-sm text-slate-600">많이 말할수록 유리합니다.</p>
+            <p className="mt-1 text-sm text-slate-600">함께 해야 성공할 수 있어요.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                <p className="text-sm font-bold text-cyan-700">리더</p>
+                <p className="mt-1 text-xs text-cyan-900">미니게임 점수 1등.</p>
+                <p className="mt-1 text-xs text-cyan-800">팀에 지시를 내릴 수 있어요.</p>
+              </div>
+              <div className="rounded-2xl border border-fuchsia-200 bg-fuchsia-50 px-4 py-3">
+                <p className="text-sm font-bold text-fuchsia-700">MVP</p>
+                <p className="mt-1 text-xs text-fuchsia-900">미션 기여도 1등.</p>
+                <p className="mt-1 text-xs text-fuchsia-800">다음 단계로 넘어가게 만들 수 있어요.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                playClick();
+                setShowEntryGuide(false);
+              }}
+              className="mt-4 w-full rounded-2xl bg-violet-600 px-4 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-violet-700"
+            >
+              시작하기
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {mode === "menu" && <CoopMenu onSelect={setMode} />}
       {mode === "pet" && <PetCoopGame onBackToMenu={() => setMode("menu")} />}
